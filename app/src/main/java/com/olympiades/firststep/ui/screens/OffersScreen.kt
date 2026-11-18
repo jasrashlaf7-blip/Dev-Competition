@@ -75,6 +75,7 @@ fun OffersScreen(
 ) {
     val strings = LocalAppStrings.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val searchQuery = viewModel.searchQuery
     val todayIso = remember { DateTimeHelper.todayIso() }
 
     Scaffold(
@@ -131,7 +132,7 @@ fun OffersScreen(
                 ) {
                     // Search bar
                     OutlinedTextField(
-                        value = criteria.query,
+                        value = searchQuery,
                         onValueChange = viewModel::updateQuery,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -151,7 +152,7 @@ fun OffersScreen(
                             )
                         },
                         trailingIcon = {
-                            if (criteria.query.isNotEmpty()) {
+                            if (searchQuery.isNotEmpty()) {
                                 IconButton(
                                     onClick = { viewModel.updateQuery("") },
                                     modifier = Modifier.testTag("clear_search_button")
@@ -186,7 +187,7 @@ fun OffersScreen(
                                 !criteria.openOnly &&
                                 criteria.domainId == null &&
                                 criteria.locationId == null &&
-                                criteria.query.isBlank(),
+                                searchQuery.isBlank(),
                             onClick = viewModel::resetToAll,
                             testTag = "filter_chip_all"
                         )

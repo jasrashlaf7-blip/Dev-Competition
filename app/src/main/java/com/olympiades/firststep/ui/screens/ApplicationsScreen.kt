@@ -85,7 +85,7 @@ fun ApplicationsScreen(
 ) {
     val strings = LocalAppStrings.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val noteDrafts by viewModel.noteDrafts.collectAsStateWithLifecycle()
+    val noteDrafts = viewModel.noteDrafts
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 

@@ -71,6 +71,7 @@ fun ProfileScreen(
 ) {
     val strings = LocalAppStrings.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val editDraft = viewModel.editDraft
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(strings) {
@@ -150,7 +151,7 @@ fun ProfileScreen(
                             )
                         }
 
-                        if (!uiState.isEditing) {
+                        if (!editDraft.isEditing) {
                             val profile = uiState.profile
                             Text(
                                 text = profile?.fullName ?: "Amina Saidi",
@@ -204,9 +205,9 @@ fun ProfileScreen(
                                 Text(text = strings.editProfileButton)
                             }
                         } else {
-                            val nameErr = strings.validationMessage(uiState.validation.nameError)
+                            val nameErr = strings.validationMessage(editDraft.validation.nameError)
                             OutlinedTextField(
-                                value = uiState.fullNameInput,
+                                value = editDraft.fullName,
                                 onValueChange = viewModel::onFullNameChange,
                                 label = { Text(strings.fullNameLabel) },
                                 isError = nameErr != null,
@@ -218,9 +219,9 @@ fun ProfileScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            val degreeErr = strings.validationMessage(uiState.validation.degreeError)
+                            val degreeErr = strings.validationMessage(editDraft.validation.degreeError)
                             OutlinedTextField(
-                                value = uiState.degreeLevelInput,
+                                value = editDraft.degreeLevel,
                                 onValueChange = viewModel::onDegreeLevelChange,
                                 label = { Text(strings.degreeLevelLabel) },
                                 isError = degreeErr != null,
@@ -232,9 +233,9 @@ fun ProfileScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            val univErr = strings.validationMessage(uiState.validation.universityError)
+                            val univErr = strings.validationMessage(editDraft.validation.universityError)
                             OutlinedTextField(
-                                value = uiState.universityInput,
+                                value = editDraft.university,
                                 onValueChange = viewModel::onUniversityChange,
                                 label = { Text(strings.universityLabel) },
                                 isError = univErr != null,
@@ -246,9 +247,9 @@ fun ProfileScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            val emailErr = strings.validationMessage(uiState.validation.emailError)
+                            val emailErr = strings.validationMessage(editDraft.validation.emailError)
                             OutlinedTextField(
-                                value = uiState.emailInput,
+                                value = editDraft.email,
                                 onValueChange = viewModel::onEmailChange,
                                 label = { Text(strings.emailLabel) },
                                 isError = emailErr != null,
@@ -260,9 +261,9 @@ fun ProfileScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            val phoneErr = strings.validationMessage(uiState.validation.phoneError)
+                            val phoneErr = strings.validationMessage(editDraft.validation.phoneError)
                             OutlinedTextField(
-                                value = uiState.phoneInput,
+                                value = editDraft.phone,
                                 onValueChange = viewModel::onPhoneChange,
                                 label = { Text(strings.phoneLabel) },
                                 isError = phoneErr != null,
@@ -275,7 +276,7 @@ fun ProfileScreen(
                             )
 
                             OutlinedTextField(
-                                value = uiState.bioInput,
+                                value = editDraft.bio,
                                 onValueChange = viewModel::onBioChange,
                                 label = { Text(strings.bioLabel) },
                                 minLines = 2,

@@ -1,5 +1,6 @@
 package com.olympiades.firststep.ui.viewmodel
 
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.olympiades.firststep.domain.model.ApplicationStatus
@@ -46,8 +47,7 @@ class ApplicationsViewModel(
     private val statusFilterFlow = MutableStateFlow<ApplicationStatus?>(null)
     private val expandedAppIdFlow = MutableStateFlow<Long?>(null)
 
-    private val _noteDrafts = MutableStateFlow<Map<Long, String>>(emptyMap())
-    val noteDrafts: StateFlow<Map<Long, String>> = _noteDrafts.asStateFlow()
+    val noteDrafts = mutableStateMapOf<Long, String>()
 
     private val _pendingConfirmation = MutableStateFlow<PendingFinalStatusChange?>(null)
     val pendingConfirmation: StateFlow<PendingFinalStatusChange?> = _pendingConfirmation.asStateFlow()
@@ -90,9 +90,7 @@ class ApplicationsViewModel(
     }
 
     fun updateNoteDraft(applicationId: Long, note: String) {
-        _noteDrafts.update { current ->
-            current + (applicationId to note)
-        }
+        noteDrafts[applicationId] = note
     }
 
     fun requestStatusTransition(
@@ -102,7 +100,7 @@ class ApplicationsViewModel(
         if (!ApplicationStateMachine.canTransition(application.currentStatus, targetStatus)) {
             return
         }
-        val note = _noteDrafts.value[application.id].orEmpty()
+        val note = noteDrafts[application.id].orEmpty()
         if (ApplicationStateMachine.requiresConfirmation(targetStatus)) {
             _pendingConfirmation.value = PendingFinalStatusChange(
                 applicationId = application.id,
@@ -137,7 +135,7 @@ class ApplicationsViewModel(
                 note = note
             )
             if (result.isSuccess) {
-                _noteDrafts.update { it - applicationId }
+                noteDrafts.remove(applicationId)
                 _statusUpdatedEvents.emit(Unit)
             }
         }

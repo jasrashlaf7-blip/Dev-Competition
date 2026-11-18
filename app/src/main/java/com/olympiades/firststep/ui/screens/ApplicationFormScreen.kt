@@ -53,7 +53,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.olympiades.firststep.domain.model.AppLanguage
 import com.olympiades.firststep.ui.components.LoadingStateView
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
@@ -71,7 +70,7 @@ fun ApplicationFormScreen(
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = viewModel.uiState
     val context = LocalContext.current
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(

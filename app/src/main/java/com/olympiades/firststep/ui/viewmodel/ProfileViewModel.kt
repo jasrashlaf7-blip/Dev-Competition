@@ -1,5 +1,8 @@
 package com.olympiades.firststep.ui.viewmodel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.olympiades.firststep.domain.model.AppLanguage
@@ -10,29 +13,29 @@ import com.olympiades.firststep.domain.usecase.StudentProfileUseCase
 import com.olympiades.firststep.domain.validation.ApplicationValidator
 import com.olympiades.firststep.domain.validation.ProfileFormValidationResult
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+data class ProfileEditDraft(
+    val isEditing: Boolean = false,
+    val fullName: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val university: String = "",
+    val degreeLevel: String = "",
+    val bio: String = "",
+    val validation: ProfileFormValidationResult = ProfileFormValidationResult()
+)
 
 data class ProfileUiState(
     val profile: StudentProfile? = null,
     val language: AppLanguage = AppLanguage.FR,
-    val themeMode: AppThemeMode = AppThemeMode.LIGHT,
-    val isEditing: Boolean = false,
-    val fullNameInput: String = "",
-    val emailInput: String = "",
-    val phoneInput: String = "",
-    val universityInput: String = "",
-    val degreeLevelInput: String = "",
-    val bioInput: String = "",
-    val validation: ProfileFormValidationResult = ProfileFormValidationResult()
+    val themeMode: AppThemeMode = AppThemeMode.LIGHT
 )
 
 class ProfileViewModel(
@@ -40,38 +43,20 @@ class ProfileViewModel(
     private val studentProfileUseCase: StudentProfileUseCase
 ) : ViewModel() {
 
-    private data class EditDraft(
-        val isEditing: Boolean = false,
-        val fullName: String = "",
-        val email: String = "",
-        val phone: String = "",
-        val university: String = "",
-        val degreeLevel: String = "",
-        val bio: String = "",
-        val validation: ProfileFormValidationResult = ProfileFormValidationResult()
-    )
+    var editDraft by mutableStateOf(ProfileEditDraft())
+        private set
 
-    private val editDraft = MutableStateFlow(EditDraft())
     private val _savedEvents = MutableSharedFlow<Unit>()
     val savedEvents: SharedFlow<Unit> = _savedEvents.asSharedFlow()
 
     val uiState: StateFlow<ProfileUiState> = combine(
         studentProfileUseCase.observeProfile(),
-        repository.observePreferences(),
-        editDraft
-    ) { profile, prefs, draft ->
+        repository.observePreferences()
+    ) { profile, prefs ->
         ProfileUiState(
             profile = profile,
             language = prefs.language,
-            themeMode = prefs.themeMode,
-            isEditing = draft.isEditing,
-            fullNameInput = if (draft.isEditing) draft.fullName else profile?.fullName.orEmpty(),
-            emailInput = if (draft.isEditing) draft.email else profile?.email.orEmpty(),
-            phoneInput = if (draft.isEditing) draft.phone else profile?.phone.orEmpty(),
-            universityInput = if (draft.isEditing) draft.university else profile?.university.orEmpty(),
-            degreeLevelInput = if (draft.isEditing) draft.degreeLevel else profile?.degreeLevel.orEmpty(),
-            bioInput = if (draft.isEditing) draft.bio else profile?.bio.orEmpty(),
-            validation = draft.validation
+            themeMode = prefs.themeMode
         )
     }.stateIn(
         scope = viewModelScope,
@@ -81,7 +66,7 @@ class ProfileViewModel(
 
     fun startEditing() {
         val currentProfile = uiState.value.profile ?: return
-        editDraft.value = EditDraft(
+        editDraft = ProfileEditDraft(
             isEditing = true,
             fullName = currentProfile.fullName,
             email = currentProfile.email,
@@ -93,33 +78,35 @@ class ProfileViewModel(
     }
 
     fun cancelEditing() {
-        editDraft.value = EditDraft(isEditing = false)
+        editDraft = ProfileEditDraft(isEditing = false)
     }
 
-    fun onFullNameChange(v: String) = editDraft.update {
-        it.copy(fullName = v, validation = it.validation.copy(nameError = null))
+    fun onFullNameChange(v: String) {
+        editDraft = editDraft.copy(fullName = v, validation = editDraft.validation.copy(nameError = null))
     }
 
-    fun onEmailChange(v: String) = editDraft.update {
-        it.copy(email = v, validation = it.validation.copy(emailError = null))
+    fun onEmailChange(v: String) {
+        editDraft = editDraft.copy(email = v, validation = editDraft.validation.copy(emailError = null))
     }
 
-    fun onPhoneChange(v: String) = editDraft.update {
-        it.copy(phone = v, validation = it.validation.copy(phoneError = null))
+    fun onPhoneChange(v: String) {
+        editDraft = editDraft.copy(phone = v, validation = editDraft.validation.copy(phoneError = null))
     }
 
-    fun onUniversityChange(v: String) = editDraft.update {
-        it.copy(university = v, validation = it.validation.copy(universityError = null))
+    fun onUniversityChange(v: String) {
+        editDraft = editDraft.copy(university = v, validation = editDraft.validation.copy(universityError = null))
     }
 
-    fun onDegreeLevelChange(v: String) = editDraft.update {
-        it.copy(degreeLevel = v, validation = it.validation.copy(degreeError = null))
+    fun onDegreeLevelChange(v: String) {
+        editDraft = editDraft.copy(degreeLevel = v, validation = editDraft.validation.copy(degreeError = null))
     }
 
-    fun onBioChange(v: String) = editDraft.update { it.copy(bio = v) }
+    fun onBioChange(v: String) {
+        editDraft = editDraft.copy(bio = v)
+    }
 
     fun saveProfile() {
-        val draft = editDraft.value
+        val draft = editDraft
         val validation = ApplicationValidator.validateProfileForm(
             fullName = draft.fullName,
             email = draft.email,
@@ -128,7 +115,7 @@ class ProfileViewModel(
             degreeLevel = draft.degreeLevel
         )
         if (!validation.isValid) {
-            editDraft.update { it.copy(validation = validation) }
+            editDraft = draft.copy(validation = validation)
             return
         }
 
@@ -146,7 +133,7 @@ class ProfileViewModel(
         )
         viewModelScope.launch {
             if (studentProfileUseCase.updateProfile(updated).isSuccess) {
-                editDraft.value = EditDraft(isEditing = false)
+                editDraft = ProfileEditDraft(isEditing = false)
                 _savedEvents.emit(Unit)
             }
         }

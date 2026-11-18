@@ -1,5 +1,8 @@
 package com.olympiades.firststep.ui.viewmodel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.olympiades.firststep.data.repository.ApplicationSubmissionError
@@ -10,13 +13,9 @@ import com.olympiades.firststep.domain.usecase.SubmitApplicationUseCase
 import com.olympiades.firststep.domain.validation.ApplicationFormValidationResult
 import com.olympiades.firststep.domain.validation.ApplicationValidator
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ApplicationFormUiState(
@@ -50,8 +49,8 @@ class ApplicationFormViewModel(
     private val submitApplicationUseCase: SubmitApplicationUseCase
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ApplicationFormUiState())
-    val uiState: StateFlow<ApplicationFormUiState> = _uiState.asStateFlow()
+    var uiState by mutableStateOf(ApplicationFormUiState())
+        private set
 
     private val _events = MutableSharedFlow<ApplicationFormEvent>()
     val events: SharedFlow<ApplicationFormEvent> = _events.asSharedFlow()
@@ -60,70 +59,59 @@ class ApplicationFormViewModel(
         viewModelScope.launch {
             val offer = runCatching { getOfferDetailUseCase(offerId).first() }.getOrNull()
             val profile = runCatching { studentProfileUseCase.observeProfile().first() }.getOrNull()
-            _uiState.update { state ->
-                state.copy(
-                    isLoading = false,
-                    offer = offer,
-                    fullName = state.fullName.ifEmpty { profile?.fullName.orEmpty() },
-                    email = state.email.ifEmpty { profile?.email.orEmpty() },
-                    phone = state.phone.ifEmpty { profile?.phone.orEmpty() },
-                    cvUri = state.cvUri.ifEmpty { profile?.cvUri.orEmpty() },
-                    cvDisplayName = state.cvDisplayName.ifEmpty {
-                        profile?.cvUri?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: ""
-                    }
-                )
-            }
+            val current = uiState
+            uiState = current.copy(
+                isLoading = false,
+                offer = offer,
+                fullName = current.fullName.ifEmpty { profile?.fullName.orEmpty() },
+                email = current.email.ifEmpty { profile?.email.orEmpty() },
+                phone = current.phone.ifEmpty { profile?.phone.orEmpty() },
+                cvUri = current.cvUri.ifEmpty { profile?.cvUri.orEmpty() },
+                cvDisplayName = current.cvDisplayName.ifEmpty {
+                    profile?.cvUri?.takeIf { it.isNotBlank() }?.substringAfterLast('/') ?: ""
+                }
+            )
         }
     }
 
     fun onFullNameChange(value: String) {
-        _uiState.update {
-            it.copy(
-                fullName = value,
-                validation = it.validation.copy(nameError = null),
-                submitError = null
-            )
-        }
+        uiState = uiState.copy(
+            fullName = value,
+            validation = uiState.validation.copy(nameError = null),
+            submitError = null
+        )
     }
 
     fun onEmailChange(value: String) {
-        _uiState.update {
-            it.copy(
-                email = value,
-                validation = it.validation.copy(emailError = null),
-                submitError = null
-            )
-        }
+        uiState = uiState.copy(
+            email = value,
+            validation = uiState.validation.copy(emailError = null),
+            submitError = null
+        )
     }
 
     fun onPhoneChange(value: String) {
-        _uiState.update {
-            it.copy(
-                phone = value,
-                validation = it.validation.copy(phoneError = null),
-                submitError = null
-            )
-        }
+        uiState = uiState.copy(
+            phone = value,
+            validation = uiState.validation.copy(phoneError = null),
+            submitError = null
+        )
     }
 
     fun onCoverLetterChange(value: String) {
-        _uiState.update {
-            it.copy(
-                coverLetter = value,
-                validation = it.validation.copy(coverLetterError = null),
-                submitError = null
-            )
-        }
+        uiState = uiState.copy(
+            coverLetter = value,
+            validation = uiState.validation.copy(coverLetterError = null),
+            submitError = null
+        )
     }
 
     fun onCvSelected(uri: String, displayName: String) {
-        _uiState.update {
-            it.copy(cvUri = uri, cvDisplayName = displayName)
-        }
+        uiState = uiState.copy(cvUri = uri, cvDisplayName = displayName)
     }
 
     fun submit(initialHistoryNote: String) {
-        val current = _uiState.value
+        val current = uiState
         val validation = ApplicationValidator.validateApplicationForm(
             fullName = current.fullName,
             email = current.email,
@@ -131,11 +119,11 @@ class ApplicationFormViewModel(
             coverLetter = current.coverLetter
         )
         if (!validation.isValid) {
-            _uiState.update { it.copy(validation = validation) }
+            uiState = current.copy(validation = validation)
             return
         }
 
-        _uiState.update { it.copy(isSubmitting = true, submitError = null) }
+        uiState = current.copy(isSubmitting = true, submitError = null)
         viewModelScope.launch {
             val result = submitApplicationUseCase(
                 offerId = offerId,
@@ -148,7 +136,7 @@ class ApplicationFormViewModel(
             )
             result.fold(
                 onSuccess = { reference ->
-                    _uiState.update { it.copy(isSubmitting = false) }
+                    uiState = uiState.copy(isSubmitting = false)
                     _events.emit(ApplicationFormEvent.Submitted(reference))
                 },
                 onFailure = { error ->
@@ -158,7 +146,7 @@ class ApplicationFormViewModel(
                         is ApplicationSubmissionError.AlreadyApplied -> SubmitFormError.ALREADY_APPLIED
                         else -> SubmitFormError.GENERIC
                     }
-                    _uiState.update { it.copy(isSubmitting = false, submitError = mapped) }
+                    uiState = uiState.copy(isSubmitting = false, submitError = mapped)
                 }
             )
         }
