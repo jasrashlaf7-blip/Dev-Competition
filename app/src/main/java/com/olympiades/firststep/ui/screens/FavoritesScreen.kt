@@ -183,6 +183,8 @@ private fun FavoriteItemCard(
     val isArabic = strings.language == AppLanguage.AR
     val offer = item.offer
     val title = if (isArabic) offer.titleAr else offer.titleFr
+    val domainName = if (isArabic) offer.domain.nameAr else offer.domain.nameFr
+    val cityName = if (isArabic) offer.location.cityAr else offer.location.cityFr
     val statusText = offer.applicationStatus?.let { strings.statusLabel(it) }
         ?: strings.notAppliedStatus
 
@@ -216,7 +218,13 @@ private fun FavoriteItemCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${offer.company.name} · $statusText",
+                        text = "${offer.company.name} · $cityName · $domainName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${strings.durationMonths(offer.durationMonths)} · $statusText",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -229,7 +237,8 @@ private fun FavoriteItemCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     onClick = onRemoveClick,
@@ -246,6 +255,17 @@ private fun FavoriteItemCard(
                     Text(
                         text = strings.removeFavoriteAction,
                         color = FavoriteHeartColor,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+
+                TextButton(
+                    onClick = onClick,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("favorite_details_button_${offer.id}")
+                ) {
+                    Text(
+                        text = strings.viewDetailsAction,
                         style = MaterialTheme.typography.labelMedium
                     )
                 }

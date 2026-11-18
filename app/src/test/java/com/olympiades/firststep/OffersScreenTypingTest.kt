@@ -14,6 +14,7 @@ import com.olympiades.firststep.data.preferences.UserPreferencesDataStore
 import com.olympiades.firststep.data.repository.FirstStepRepositoryImpl
 import com.olympiades.firststep.domain.usecase.GetDomainsAndLocationsUseCase
 import com.olympiades.firststep.domain.usecase.GetFilteredOffersUseCase
+import com.olympiades.firststep.domain.usecase.ManageOfferUseCase
 import com.olympiades.firststep.domain.usecase.ToggleFavoriteUseCase
 import com.olympiades.firststep.ui.screens.OffersScreen
 import com.olympiades.firststep.ui.theme.FirstStepTheme
@@ -50,6 +51,7 @@ class OffersScreenTypingTest {
             repository = repository,
             getFilteredOffersUseCase = GetFilteredOffersUseCase(repository),
             getDomainsAndLocationsUseCase = GetDomainsAndLocationsUseCase(repository),
+            manageOfferUseCase = ManageOfferUseCase(repository),
             toggleFavoriteUseCase = ToggleFavoriteUseCase(repository)
         )
     }

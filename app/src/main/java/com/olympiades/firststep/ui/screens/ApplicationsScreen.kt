@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Lock
@@ -52,7 +53,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +70,7 @@ import com.olympiades.firststep.domain.model.ApplicationWithDetails
 import com.olympiades.firststep.domain.model.DateTimeHelper
 import com.olympiades.firststep.domain.validation.ApplicationStateMachine
 import com.olympiades.firststep.ui.components.ApplicationStatusBadge
+import com.olympiades.firststep.ui.components.EditApplicationDialog
 import com.olympiades.firststep.ui.components.EmptyStateView
 import com.olympiades.firststep.ui.components.ErrorStateView
 import com.olympiades.firststep.ui.components.FirstStepFilterChip
@@ -88,11 +92,37 @@ fun ApplicationsScreen(
     val noteDrafts = viewModel.noteDrafts
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var editingApplication by remember { mutableStateOf<ApplicationWithDetails?>(null) }
 
     LaunchedEffect(strings) {
         viewModel.statusUpdatedEvents.collect {
             snackbarHostState.showSnackbar(strings.statusUpdatedSnackbar)
         }
+    }
+
+    LaunchedEffect(strings) {
+        viewModel.detailsUpdatedEvents.collect {
+            snackbarHostState.showSnackbar(strings.applicationEditedSnackbar)
+        }
+    }
+
+    editingApplication?.let { targetApp ->
+        EditApplicationDialog(
+            application = targetApp,
+            onDismiss = { editingApplication = null },
+            onSave = { name, email, phone, coverLetter, cvUri ->
+                viewModel.saveEditedDetails(
+                    applicationId = targetApp.id,
+                    applicantName = name,
+                    applicantEmail = email,
+                    applicantPhone = phone,
+                    coverLetter = coverLetter,
+                    cvUri = cvUri,
+                    editNote = strings.applicationEditedHistoryNote
+                )
+                editingApplication = null
+            }
+        )
     }
 
     if (pendingConfirmation != null) {
@@ -223,6 +253,7 @@ fun ApplicationsScreen(
                                         noteDraft = noteDrafts[app.id].orEmpty(),
                                         onToggleExpand = { viewModel.toggleExpanded(app.id) },
                                         onOpenOffer = { onOfferClick(app.offer.id) },
+                                        onEditDetailsClick = { editingApplication = app },
                                         onNoteChange = { viewModel.updateNoteDraft(app.id, it) },
                                         onSelectNextStatus = { nextStatus ->
                                             viewModel.requestStatusTransition(app, nextStatus)
@@ -246,6 +277,7 @@ private fun ApplicationTrackingCard(
     noteDraft: String,
     onToggleExpand: () -> Unit,
     onOpenOffer: () -> Unit,
+    onEditDetailsClick: () -> Unit,
     onNoteChange: (String) -> Unit,
     onSelectNextStatus: (ApplicationStatus) -> Unit
 ) {
@@ -311,6 +343,83 @@ private fun ApplicationTrackingCard(
                         .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    HorizontalDivider()
+
+                    // Full saved application details from SQLite
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.applicationDetailsTitle,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (!application.currentStatus.isFinal) {
+                                    TextButton(
+                                        onClick = onEditDetailsClick,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.testTag("edit_application_${application.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = strings.editApplicationButton,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = application.applicantName,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "${application.applicantEmail} · ${application.applicantPhone}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${strings.appliedDateLabel}: ${application.appliedAt}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${strings.coverLetterLabel.removeSuffix(" *")}: ${application.coverLetter}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "${strings.cvDocumentLabel}: ${
+                                    if (application.cvUri.isNotBlank()) {
+                                        application.cvUri.substringAfterLast('/')
+                                    } else {
+                                        strings.notProvidedLabel
+                                    }
+                                }",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
                     HorizontalDivider()
 
                     // Chronological status history timeline

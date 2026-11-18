@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.LocationOn
@@ -39,14 +40,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,12 +67,14 @@ import com.olympiades.firststep.ui.components.ApplicationStatusBadge
 import com.olympiades.firststep.ui.components.EmptyStateView
 import com.olympiades.firststep.ui.components.ErrorStateView
 import com.olympiades.firststep.ui.components.LoadingStateView
+import com.olympiades.firststep.ui.components.OfferEditorDialog
 import com.olympiades.firststep.ui.components.StatusBadge
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
 import com.olympiades.firststep.ui.theme.FavoriteHeartColor
 import com.olympiades.firststep.ui.theme.FirstStepPrimary
 import com.olympiades.firststep.ui.theme.FirstStepSecondary
 import com.olympiades.firststep.ui.theme.OfferClosedColor
+import com.olympiades.firststep.ui.viewmodel.OfferDetailEvent
 import com.olympiades.firststep.ui.viewmodel.OfferDetailUiState
 import com.olympiades.firststep.ui.viewmodel.OfferDetailViewModel
 
@@ -81,11 +89,58 @@ fun OfferDetailScreen(
     val strings = LocalAppStrings.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val todayIso = remember { DateTimeHelper.todayIso() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showEditOfferDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(strings) {
+        viewModel.events.collect { event ->
+            when (event) {
+                OfferDetailEvent.OfferUpdated -> {
+                    snackbarHostState.showSnackbar(strings.offerUpdatedSnackbar)
+                }
+                OfferDetailEvent.OfferDeleted -> {
+                    onNavigateBack()
+                }
+            }
+        }
+    }
+
+    val successState = uiState as? OfferDetailUiState.Success
+    if (showEditOfferDialog && successState != null) {
+        OfferEditorDialog(
+            existingOffer = successState.offer,
+            companies = successState.companies,
+            domains = successState.domains,
+            locations = successState.locations,
+            onDismiss = { showEditOfferDialog = false },
+            onSave = { companyId, domainId, locationId, titleFr, titleAr, descFr, descAr, months, isPaid, status, deadline ->
+                viewModel.updateOffer(
+                    companyId = companyId,
+                    domainId = domainId,
+                    locationId = locationId,
+                    titleFr = titleFr,
+                    titleAr = titleAr,
+                    descriptionFr = descFr,
+                    descriptionAr = descAr,
+                    durationMonths = months,
+                    isPaid = isPaid,
+                    status = status,
+                    deadline = deadline
+                )
+                showEditOfferDialog = false
+            },
+            onDelete = {
+                showEditOfferDialog = false
+                viewModel.deleteOffer()
+            }
+        )
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             val isFavorite = (uiState as? OfferDetailUiState.Success)?.offer?.isFavorite == true
             TopAppBar(
@@ -110,6 +165,18 @@ fun OfferDetailScreen(
                 },
                 actions = {
                     if (uiState is OfferDetailUiState.Success) {
+                        IconButton(
+                            onClick = { showEditOfferDialog = true },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("detail_edit_offer_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = strings.editOfferButtonCd,
+                                tint = Color.White
+                            )
+                        }
                         IconButton(
                             onClick = viewModel::toggleFavorite,
                             modifier = Modifier

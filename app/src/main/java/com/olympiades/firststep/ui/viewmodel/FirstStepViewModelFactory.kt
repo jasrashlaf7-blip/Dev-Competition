@@ -20,6 +20,7 @@ class FirstStepViewModelFactory(
                     repository = container.repository,
                     getFilteredOffersUseCase = container.getFilteredOffersUseCase,
                     getDomainsAndLocationsUseCase = container.getDomainsAndLocationsUseCase,
+                    manageOfferUseCase = container.manageOfferUseCase,
                     toggleFavoriteUseCase = container.toggleFavoriteUseCase
                 ) as T
             }
@@ -27,6 +28,8 @@ class FirstStepViewModelFactory(
                 OfferDetailViewModel(
                     offerId = requireNotNull(offerId),
                     getOfferDetailUseCase = container.getOfferDetailUseCase,
+                    getDomainsAndLocationsUseCase = container.getDomainsAndLocationsUseCase,
+                    manageOfferUseCase = container.manageOfferUseCase,
                     toggleFavoriteUseCase = container.toggleFavoriteUseCase
                 ) as T
             }

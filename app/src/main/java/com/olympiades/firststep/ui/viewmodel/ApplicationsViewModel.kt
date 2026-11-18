@@ -55,6 +55,9 @@ class ApplicationsViewModel(
     private val _statusUpdatedEvents = MutableSharedFlow<Unit>()
     val statusUpdatedEvents: SharedFlow<Unit> = _statusUpdatedEvents.asSharedFlow()
 
+    private val _detailsUpdatedEvents = MutableSharedFlow<Unit>()
+    val detailsUpdatedEvents: SharedFlow<Unit> = _detailsUpdatedEvents.asSharedFlow()
+
     val uiState: StateFlow<ApplicationsUiState> = statusFilterFlow
         .flatMapLatest { filter ->
             combine(
@@ -91,6 +94,31 @@ class ApplicationsViewModel(
 
     fun updateNoteDraft(applicationId: Long, note: String) {
         noteDrafts[applicationId] = note
+    }
+
+    fun saveEditedDetails(
+        applicationId: Long,
+        applicantName: String,
+        applicantEmail: String,
+        applicantPhone: String,
+        coverLetter: String,
+        cvUri: String,
+        editNote: String
+    ) {
+        viewModelScope.launch {
+            val result = updateApplicationStatusUseCase.updateDetails(
+                applicationId = applicationId,
+                applicantName = applicantName,
+                applicantEmail = applicantEmail,
+                applicantPhone = applicantPhone,
+                coverLetter = coverLetter,
+                cvUri = cvUri,
+                editNote = editNote
+            )
+            if (result.isSuccess) {
+                _detailsUpdatedEvents.emit(Unit)
+            }
+        }
     }
 
     fun requestStatusTransition(

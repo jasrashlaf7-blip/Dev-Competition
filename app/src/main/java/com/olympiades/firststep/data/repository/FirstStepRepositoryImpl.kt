@@ -4,12 +4,14 @@ import com.olympiades.firststep.data.local.FirstStepDatabase
 import com.olympiades.firststep.data.local.SeedDataLoader
 import com.olympiades.firststep.data.local.entities.ApplicationEntity
 import com.olympiades.firststep.data.local.entities.FavoriteEntity
+import com.olympiades.firststep.data.local.entities.OfferEntity
 import com.olympiades.firststep.data.preferences.UserPreferencesDataStore
 import com.olympiades.firststep.data.preferences.UserPreferencesState
 import com.olympiades.firststep.domain.model.AppLanguage
 import com.olympiades.firststep.domain.model.AppThemeMode
 import com.olympiades.firststep.domain.model.ApplicationStatus
 import com.olympiades.firststep.domain.model.ApplicationWithDetails
+import com.olympiades.firststep.domain.model.Company
 import com.olympiades.firststep.domain.model.DateTimeHelper
 import com.olympiades.firststep.domain.model.Domain
 import com.olympiades.firststep.domain.model.FavoriteOffer
@@ -21,6 +23,8 @@ import com.olympiades.firststep.domain.model.OfferStatus
 import com.olympiades.firststep.domain.model.StudentProfile
 import com.olympiades.firststep.domain.repository.FirstStepRepository
 import com.olympiades.firststep.domain.validation.ApplicationStateMachine
+import java.text.Normalizer
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -53,11 +57,11 @@ class FirstStepRepositoryImpl(
     }
 
     override fun observeFilteredOffers(criteria: OfferFilterCriteria): Flow<List<Offer>> {
-        val trimmedQuery = criteria.query.trim()
+        val searchTokens = tokenizeQuery(criteria.query)
         val todayIso = DateTimeHelper.todayIso()
         val flow = when (criteria.sortOption) {
             OfferSortOption.NEWEST -> offerDao.getFilteredOffersOrderByNewest(
-                query = trimmedQuery,
+                query = "",
                 domainId = criteria.domainId,
                 locationId = criteria.locationId,
                 paidOnly = criteria.paidOnly,
@@ -65,7 +69,7 @@ class FirstStepRepositoryImpl(
                 todayIso = todayIso
             )
             OfferSortOption.CLOSEST_DEADLINE -> offerDao.getFilteredOffersOrderByDeadline(
-                query = trimmedQuery,
+                query = "",
                 domainId = criteria.domainId,
                 locationId = criteria.locationId,
                 paidOnly = criteria.paidOnly,
@@ -73,7 +77,14 @@ class FirstStepRepositoryImpl(
                 todayIso = todayIso
             )
         }
-        return flow.map { list -> list.map { it.toDomain() } }
+        return flow.map { list ->
+            val domainOffers = list.map { it.toDomain() }
+            if (searchTokens.isEmpty()) {
+                domainOffers
+            } else {
+                domainOffers.filter { offer -> offer.matchesAllSearchTokens(searchTokens) }
+            }
+        }
     }
 
     override fun observeOfferById(offerId: Long): Flow<Offer?> =
@@ -84,6 +95,88 @@ class FirstStepRepositoryImpl(
 
     override fun observeLocations(): Flow<List<Location>> =
         offerDao.observeAllLocations().map { list -> list.map { it.toDomain() } }
+
+    override fun observeCompanies(): Flow<List<Company>> =
+        offerDao.observeAllCompanies().map { list -> list.map { it.toDomain() } }
+
+    override suspend fun createOffer(
+        companyId: Long,
+        domainId: Long,
+        locationId: Long,
+        titleFr: String,
+        titleAr: String,
+        descriptionFr: String,
+        descriptionAr: String,
+        durationMonths: Int,
+        isPaid: Boolean,
+        status: OfferStatus,
+        deadline: String
+    ): Result<Long> {
+        return runCatching {
+            val cleanTitleFr = titleFr.trim()
+            val cleanTitleAr = titleAr.trim().ifEmpty { cleanTitleFr }
+            val cleanDescFr = descriptionFr.trim()
+            val cleanDescAr = descriptionAr.trim().ifEmpty { cleanDescFr }
+            offerDao.insertOffer(
+                OfferEntity(
+                    companyId = companyId,
+                    domainId = domainId,
+                    locationId = locationId,
+                    titleFr = cleanTitleFr,
+                    titleAr = cleanTitleAr,
+                    descriptionFr = cleanDescFr,
+                    descriptionAr = cleanDescAr,
+                    durationMonths = durationMonths.coerceIn(1, 24),
+                    isPaid = isPaid,
+                    status = status,
+                    deadline = deadline.trim(),
+                    createdAt = DateTimeHelper.nowTimestamp()
+                )
+            )
+        }
+    }
+
+    override suspend fun updateOffer(
+        offerId: Long,
+        companyId: Long,
+        domainId: Long,
+        locationId: Long,
+        titleFr: String,
+        titleAr: String,
+        descriptionFr: String,
+        descriptionAr: String,
+        durationMonths: Int,
+        isPaid: Boolean,
+        status: OfferStatus,
+        deadline: String
+    ): Result<Unit> {
+        return runCatching {
+            val cleanTitleFr = titleFr.trim()
+            val cleanTitleAr = titleAr.trim().ifEmpty { cleanTitleFr }
+            val cleanDescFr = descriptionFr.trim()
+            val cleanDescAr = descriptionAr.trim().ifEmpty { cleanDescFr }
+            offerDao.updateOffer(
+                offerId = offerId,
+                companyId = companyId,
+                domainId = domainId,
+                locationId = locationId,
+                titleFr = cleanTitleFr,
+                titleAr = cleanTitleAr,
+                descriptionFr = cleanDescFr,
+                descriptionAr = cleanDescAr,
+                durationMonths = durationMonths.coerceIn(1, 24),
+                isPaid = isPaid,
+                status = status.name,
+                deadline = deadline.trim()
+            )
+        }
+    }
+
+    override suspend fun deleteOffer(offerId: Long): Result<Unit> {
+        return runCatching {
+            offerDao.deleteOfferById(offerId)
+        }
+    }
 
     override fun observeFavorites(): Flow<List<FavoriteOffer>> =
         favoriteDao.observeAllFavorites().map { list -> list.map { it.toDomain() } }
@@ -196,6 +289,36 @@ class FirstStepRepositoryImpl(
         }
     }
 
+    override suspend fun updateApplicationDetails(
+        applicationId: Long,
+        applicantName: String,
+        applicantEmail: String,
+        applicantPhone: String,
+        coverLetter: String,
+        cvUri: String,
+        editNote: String
+    ): Result<Unit> {
+        return runCatching {
+            val existing = applicationDao.getApplicationById(applicationId)
+                ?: throw StatusTransitionError.ApplicationNotFound
+            val currentStatus = existing.application.currentStatus
+            if (currentStatus.isFinal) {
+                throw StatusTransitionError.FinalStateLocked
+            }
+            applicationDao.updateApplicationDetailsWithHistory(
+                applicationId = applicationId,
+                applicantName = applicantName.trim(),
+                applicantEmail = applicantEmail.trim(),
+                applicantPhone = applicantPhone.trim(),
+                coverLetter = coverLetter.trim(),
+                cvUri = cvUri.trim(),
+                currentStatus = currentStatus,
+                changedAt = DateTimeHelper.nowTimestamp(),
+                note = editNote.trim()
+            )
+        }
+    }
+
     override fun observeStudentProfile(): Flow<StudentProfile?> =
         profileDao.observeProfile().map { it?.toDomain() }
 
@@ -218,5 +341,46 @@ class FirstStepRepositoryImpl(
 
     override suspend fun saveLastFilters(criteria: OfferFilterCriteria) {
         preferencesDataStore.saveFilters(criteria)
+    }
+
+    companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
+        private val DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+
+        private fun normalizeSearchText(input: String): String {
+            val decomposed = Normalizer.normalize(input, Normalizer.Form.NFD)
+            return DIACRITICS_REGEX.replace(decomposed, "").lowercase(Locale.ROOT)
+        }
+
+        private fun tokenizeQuery(query: String): List<String> {
+            val normalized = normalizeSearchText(query).trim()
+            if (normalized.isEmpty()) return emptyList()
+            return normalized.split(WHITESPACE_REGEX).filter { it.isNotBlank() }
+        }
+
+        private fun Offer.matchesAllSearchTokens(tokens: List<String>): Boolean {
+            val searchableText = normalizeSearchText(
+                buildString {
+                    append(titleFr).append(' ')
+                    append(titleAr).append(' ')
+                    append(descriptionFr).append(' ')
+                    append(descriptionAr).append(' ')
+                    append(company.name).append(' ')
+                    append(company.sectorFr).append(' ')
+                    append(company.sectorAr).append(' ')
+                    append(domain.nameFr).append(' ')
+                    append(domain.nameAr).append(' ')
+                    append(location.cityFr).append(' ')
+                    append(location.cityAr).append(' ')
+                    append(location.regionFr).append(' ')
+                    append(location.regionAr).append(' ')
+                    skills.forEach { skill ->
+                        append(skill.nameFr).append(' ')
+                        append(skill.nameAr).append(' ')
+                    }
+                }
+            )
+            return tokens.all { token -> searchableText.contains(token) }
+        }
     }
 }

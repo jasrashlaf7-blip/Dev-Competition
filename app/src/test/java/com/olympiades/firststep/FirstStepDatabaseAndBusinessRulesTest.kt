@@ -198,4 +198,107 @@ class FirstStepDatabaseAndBusinessRulesTest {
         assertNotNull(result.phoneError)
         assertNotNull(result.coverLetterError)
     }
+
+    @Test
+    fun `search matches any word in any order across title company city domain skills and accents`() = runTest {
+        repository.ensureInitialized()
+
+        // Search by skill + city in reverse order
+        val kotlinOran = repository.observeFilteredOffers(
+            OfferFilterCriteria(query = "Oran Kotlin")
+        ).first()
+        assertTrue(kotlinOran.isNotEmpty())
+        assertTrue(kotlinOran.all { offer ->
+            offer.location.cityFr.contains("Oran", ignoreCase = true)
+        })
+
+        // Search without French accents ("developpement" -> "Développement")
+        val noAccentResults = repository.observeFilteredOffers(
+            OfferFilterCriteria(query = "developpement")
+        ).first()
+        assertTrue(noAccentResults.isNotEmpty())
+    }
+
+    @Test
+    fun `editing application details updates sqlite row and history`() = runTest {
+        repository.ensureInitialized()
+
+        repository.submitApplication(
+            offerId = 1L,
+            applicantName = "Amina Saidi",
+            applicantEmail = "amina.saidi@email.dz",
+            applicantPhone = "+213 555 12 34 56",
+            coverLetter = "Lettre initiale suffisamment longue pour validation.",
+            cvUri = "",
+            initialNote = "Soumise"
+        )
+
+        val appId = repository.observeApplications(null).first().first().id
+        val editResult = repository.updateApplicationDetails(
+            applicationId = appId,
+            applicantName = "Djasser Mansouri",
+            applicantEmail = "djasser@email.dz",
+            applicantPhone = "+213 555 99 88 77",
+            coverLetter = "Lettre modifiée avec de nouveaux détails techniques.",
+            cvUri = "content://cv/djasser.pdf",
+            editNote = "Informations modifiées"
+        )
+        assertTrue(editResult.isSuccess)
+
+        val updated = repository.observeApplications(null).first().first()
+        assertEquals("Djasser Mansouri", updated.applicantName)
+        assertEquals("djasser@email.dz", updated.applicantEmail)
+        assertEquals("content://cv/djasser.pdf", updated.cvUri)
+        assertEquals(2, updated.history.size)
+    }
+
+    @Test
+    fun `create update and delete offer persists in sqlite`() = runTest {
+        repository.ensureInitialized()
+
+        val createResult = repository.createOffer(
+            companyId = 1L,
+            domainId = 1L,
+            locationId = 1L,
+            titleFr = "Stage Android Avancé",
+            titleAr = "تربص أندرويد متقدم",
+            descriptionFr = "Développement Kotlin et Jetpack Compose hors-ligne.",
+            descriptionAr = "تطوير تطبيقات أندرويد باستخدام كوتلن.",
+            durationMonths = 4,
+            isPaid = true,
+            status = OfferStatus.OPEN,
+            deadline = "2026-12-30"
+        )
+        assertTrue(createResult.isSuccess)
+        val newOfferId = createResult.getOrThrow()
+
+        val created = repository.observeOfferById(newOfferId).first()
+        assertNotNull(created)
+        assertEquals("Stage Android Avancé", created?.titleFr)
+
+        val updateResult = repository.updateOffer(
+            offerId = newOfferId,
+            companyId = 1L,
+            domainId = 1L,
+            locationId = 2L,
+            titleFr = "Stage Android Senior",
+            titleAr = "تربص أندرويد",
+            descriptionFr = "Description mise à jour.",
+            descriptionAr = "وصف محدث.",
+            durationMonths = 6,
+            isPaid = false,
+            status = OfferStatus.CLOSED,
+            deadline = "2026-12-31"
+        )
+        assertTrue(updateResult.isSuccess)
+
+        val updated = repository.observeOfferById(newOfferId).first()
+        assertEquals("Stage Android Senior", updated?.titleFr)
+        assertEquals(6, updated?.durationMonths)
+        assertEquals(OfferStatus.CLOSED, updated?.status)
+
+        assertTrue(repository.deleteOffer(newOfferId).isSuccess)
+        val deleted = repository.observeOfferById(newOfferId).first()
+        assertEquals(null, deleted)
+    }
 }

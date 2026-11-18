@@ -1,6 +1,7 @@
 package com.olympiades.firststep.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -20,6 +21,7 @@ import com.olympiades.firststep.data.local.entities.OfferSkillCrossRef
 import com.olympiades.firststep.data.local.entities.SkillEntity
 import com.olympiades.firststep.data.local.entities.StatusHistoryEntity
 import com.olympiades.firststep.data.local.entities.StudentProfileEntity
+import java.util.concurrent.Executors
 
 @Database(
     entities = [
@@ -57,6 +59,12 @@ abstract class FirstStepDatabase : RoomDatabase() {
                     "firststep_offline.db"
                 )
                     .setJournalMode(JournalMode.TRUNCATE)
+                    .setQueryCallback(
+                        { sqlQuery, bindArgs ->
+                            Log.d("FIRSTSTEP_SQL", "SQL: $sqlQuery | args=$bindArgs")
+                        },
+                        Executors.newSingleThreadExecutor()
+                    )
                     .build()
                     .also { INSTANCE = it }
             }

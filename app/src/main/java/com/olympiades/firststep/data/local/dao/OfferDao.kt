@@ -22,6 +22,8 @@ interface OfferDao {
         """
         SELECT o.* FROM offers o
         INNER JOIN companies c ON o.company_id = c.id
+        INNER JOIN domains d ON o.domain_id = d.id
+        INNER JOIN locations l ON o.location_id = l.id
         WHERE (:domainId IS NULL OR o.domain_id = :domainId)
           AND (:locationId IS NULL OR o.location_id = :locationId)
           AND (:paidOnly = 0 OR o.is_paid = 1)
@@ -33,6 +35,16 @@ interface OfferDao {
             OR o.description_fr LIKE '%' || :query || '%'
             OR o.description_ar LIKE '%' || :query || '%'
             OR c.name LIKE '%' || :query || '%'
+            OR d.name_fr LIKE '%' || :query || '%'
+            OR d.name_ar LIKE '%' || :query || '%'
+            OR l.city_fr LIKE '%' || :query || '%'
+            OR l.city_ar LIKE '%' || :query || '%'
+            OR EXISTS (
+                SELECT 1 FROM offer_skills os
+                INNER JOIN skills s ON os.skill_id = s.id
+                WHERE os.offer_id = o.id
+                  AND (s.name_fr LIKE '%' || :query || '%' OR s.name_ar LIKE '%' || :query || '%')
+            )
           )
         ORDER BY o.created_at DESC, o.id DESC
         """
@@ -51,6 +63,8 @@ interface OfferDao {
         """
         SELECT o.* FROM offers o
         INNER JOIN companies c ON o.company_id = c.id
+        INNER JOIN domains d ON o.domain_id = d.id
+        INNER JOIN locations l ON o.location_id = l.id
         WHERE (:domainId IS NULL OR o.domain_id = :domainId)
           AND (:locationId IS NULL OR o.location_id = :locationId)
           AND (:paidOnly = 0 OR o.is_paid = 1)
@@ -62,6 +76,16 @@ interface OfferDao {
             OR o.description_fr LIKE '%' || :query || '%'
             OR o.description_ar LIKE '%' || :query || '%'
             OR c.name LIKE '%' || :query || '%'
+            OR d.name_fr LIKE '%' || :query || '%'
+            OR d.name_ar LIKE '%' || :query || '%'
+            OR l.city_fr LIKE '%' || :query || '%'
+            OR l.city_ar LIKE '%' || :query || '%'
+            OR EXISTS (
+                SELECT 1 FROM offer_skills os
+                INNER JOIN skills s ON os.skill_id = s.id
+                WHERE os.offer_id = o.id
+                  AND (s.name_fr LIKE '%' || :query || '%' OR s.name_ar LIKE '%' || :query || '%')
+            )
           )
         ORDER BY o.deadline ASC, o.id ASC
         """
@@ -89,6 +113,9 @@ interface OfferDao {
     @Query("SELECT * FROM locations ORDER BY id ASC")
     fun observeAllLocations(): Flow<List<LocationEntity>>
 
+    @Query("SELECT * FROM companies ORDER BY id ASC")
+    fun observeAllCompanies(): Flow<List<CompanyEntity>>
+
     @Query("SELECT COUNT(*) FROM offers")
     suspend fun getOfferCount(): Int
 
@@ -106,6 +133,44 @@ interface OfferDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertOffers(offers: List<OfferEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertOffer(offer: OfferEntity): Long
+
+    @Query(
+        """
+        UPDATE offers
+        SET company_id = :companyId,
+            domain_id = :domainId,
+            location_id = :locationId,
+            title_fr = :titleFr,
+            title_ar = :titleAr,
+            description_fr = :descriptionFr,
+            description_ar = :descriptionAr,
+            duration_months = :durationMonths,
+            is_paid = :isPaid,
+            status = :status,
+            deadline = :deadline
+        WHERE id = :offerId
+        """
+    )
+    suspend fun updateOffer(
+        offerId: Long,
+        companyId: Long,
+        domainId: Long,
+        locationId: Long,
+        titleFr: String,
+        titleAr: String,
+        descriptionFr: String,
+        descriptionAr: String,
+        durationMonths: Int,
+        isPaid: Boolean,
+        status: String,
+        deadline: String
+    )
+
+    @Query("DELETE FROM offers WHERE id = :offerId")
+    suspend fun deleteOfferById(offerId: Long)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertOfferSkills(crossRefs: List<OfferSkillCrossRef>)

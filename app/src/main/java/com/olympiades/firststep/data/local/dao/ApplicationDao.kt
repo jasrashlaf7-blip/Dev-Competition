@@ -64,6 +64,26 @@ interface ApplicationDao {
         return newId
     }
 
+    @Query(
+        """
+        UPDATE applications
+        SET applicant_name = :applicantName,
+            applicant_email = :applicantEmail,
+            applicant_phone = :applicantPhone,
+            cover_letter = :coverLetter,
+            cv_uri = :cvUri
+        WHERE id = :applicationId
+        """
+    )
+    suspend fun updateApplicationDetails(
+        applicationId: Long,
+        applicantName: String,
+        applicantEmail: String,
+        applicantPhone: String,
+        coverLetter: String,
+        cvUri: String
+    )
+
     @Transaction
     suspend fun changeStatusWithHistory(
         applicationId: Long,
@@ -78,6 +98,37 @@ interface ApplicationDao {
                 applicationId = applicationId,
                 oldStatus = oldStatus,
                 newStatus = newStatus,
+                changedAt = changedAt,
+                note = note
+            )
+        )
+    }
+
+    @Transaction
+    suspend fun updateApplicationDetailsWithHistory(
+        applicationId: Long,
+        applicantName: String,
+        applicantEmail: String,
+        applicantPhone: String,
+        coverLetter: String,
+        cvUri: String,
+        currentStatus: ApplicationStatus,
+        changedAt: String,
+        note: String
+    ) {
+        updateApplicationDetails(
+            applicationId = applicationId,
+            applicantName = applicantName,
+            applicantEmail = applicantEmail,
+            applicantPhone = applicantPhone,
+            coverLetter = coverLetter,
+            cvUri = cvUri
+        )
+        insertStatusHistory(
+            StatusHistoryEntity(
+                applicationId = applicationId,
+                oldStatus = currentStatus,
+                newStatus = currentStatus,
                 changedAt = changedAt,
                 note = note
             )

@@ -2,11 +2,13 @@ package com.olympiades.firststep.domain.usecase
 
 import com.olympiades.firststep.domain.model.ApplicationStatus
 import com.olympiades.firststep.domain.model.ApplicationWithDetails
+import com.olympiades.firststep.domain.model.Company
 import com.olympiades.firststep.domain.model.Domain
 import com.olympiades.firststep.domain.model.FavoriteOffer
 import com.olympiades.firststep.domain.model.Location
 import com.olympiades.firststep.domain.model.Offer
 import com.olympiades.firststep.domain.model.OfferFilterCriteria
+import com.olympiades.firststep.domain.model.OfferStatus
 import com.olympiades.firststep.domain.model.StudentProfile
 import com.olympiades.firststep.domain.repository.FirstStepRepository
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +26,65 @@ class GetOfferDetailUseCase(private val repository: FirstStepRepository) {
 class GetDomainsAndLocationsUseCase(private val repository: FirstStepRepository) {
     fun domains(): Flow<List<Domain>> = repository.observeDomains()
     fun locations(): Flow<List<Location>> = repository.observeLocations()
+    fun companies(): Flow<List<Company>> = repository.observeCompanies()
+}
+
+class ManageOfferUseCase(private val repository: FirstStepRepository) {
+    suspend fun createOffer(
+        companyId: Long,
+        domainId: Long,
+        locationId: Long,
+        titleFr: String,
+        titleAr: String,
+        descriptionFr: String,
+        descriptionAr: String,
+        durationMonths: Int,
+        isPaid: Boolean,
+        status: OfferStatus,
+        deadline: String
+    ): Result<Long> = repository.createOffer(
+        companyId = companyId,
+        domainId = domainId,
+        locationId = locationId,
+        titleFr = titleFr,
+        titleAr = titleAr,
+        descriptionFr = descriptionFr,
+        descriptionAr = descriptionAr,
+        durationMonths = durationMonths,
+        isPaid = isPaid,
+        status = status,
+        deadline = deadline
+    )
+
+    suspend fun updateOffer(
+        offerId: Long,
+        companyId: Long,
+        domainId: Long,
+        locationId: Long,
+        titleFr: String,
+        titleAr: String,
+        descriptionFr: String,
+        descriptionAr: String,
+        durationMonths: Int,
+        isPaid: Boolean,
+        status: OfferStatus,
+        deadline: String
+    ): Result<Unit> = repository.updateOffer(
+        offerId = offerId,
+        companyId = companyId,
+        domainId = domainId,
+        locationId = locationId,
+        titleFr = titleFr,
+        titleAr = titleAr,
+        descriptionFr = descriptionFr,
+        descriptionAr = descriptionAr,
+        durationMonths = durationMonths,
+        isPaid = isPaid,
+        status = status,
+        deadline = deadline
+    )
+
+    suspend fun deleteOffer(offerId: Long): Result<Unit> = repository.deleteOffer(offerId)
 }
 
 class ToggleFavoriteUseCase(private val repository: FirstStepRepository) {
@@ -62,6 +123,24 @@ class UpdateApplicationStatusUseCase(private val repository: FirstStepRepository
         newStatus: ApplicationStatus,
         note: String
     ): Result<Unit> = repository.updateApplicationStatus(applicationId, newStatus, note)
+
+    suspend fun updateDetails(
+        applicationId: Long,
+        applicantName: String,
+        applicantEmail: String,
+        applicantPhone: String,
+        coverLetter: String,
+        cvUri: String,
+        editNote: String
+    ): Result<Unit> = repository.updateApplicationDetails(
+        applicationId = applicationId,
+        applicantName = applicantName,
+        applicantEmail = applicantEmail,
+        applicantPhone = applicantPhone,
+        coverLetter = coverLetter,
+        cvUri = cvUri,
+        editNote = editNote
+    )
 }
 
 class StudentProfileUseCase(private val repository: FirstStepRepository) {

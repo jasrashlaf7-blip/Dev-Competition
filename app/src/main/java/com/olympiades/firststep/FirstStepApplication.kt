@@ -9,6 +9,7 @@ import com.olympiades.firststep.domain.repository.FirstStepRepository
 import com.olympiades.firststep.domain.usecase.GetDomainsAndLocationsUseCase
 import com.olympiades.firststep.domain.usecase.GetFilteredOffersUseCase
 import com.olympiades.firststep.domain.usecase.GetOfferDetailUseCase
+import com.olympiades.firststep.domain.usecase.ManageOfferUseCase
 import com.olympiades.firststep.domain.usecase.StudentProfileUseCase
 import com.olympiades.firststep.domain.usecase.SubmitApplicationUseCase
 import com.olympiades.firststep.domain.usecase.ToggleFavoriteUseCase
@@ -38,6 +39,7 @@ class FirstStepContainer(application: Application) {
     val getFilteredOffersUseCase by lazy { GetFilteredOffersUseCase(repository) }
     val getOfferDetailUseCase by lazy { GetOfferDetailUseCase(repository) }
     val getDomainsAndLocationsUseCase by lazy { GetDomainsAndLocationsUseCase(repository) }
+    val manageOfferUseCase by lazy { ManageOfferUseCase(repository) }
     val toggleFavoriteUseCase by lazy { ToggleFavoriteUseCase(repository) }
     val submitApplicationUseCase by lazy { SubmitApplicationUseCase(repository) }
     val updateApplicationStatusUseCase by lazy { UpdateApplicationStatusUseCase(repository) }
