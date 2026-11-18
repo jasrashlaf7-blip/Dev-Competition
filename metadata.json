@@ -1,0 +1,6 @@
+{
+  "name": "FirstStep",
+  "description": "Bilingual (FR/AR) 100% offline-first internship & first-experience tracker built for the African Skills Olympics – Oran 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

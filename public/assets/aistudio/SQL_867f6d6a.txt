@@ -1,0 +1,222 @@
+
+ Script de création de la base de données (schema.sql)
+
+sql
+PRAGMA foreign_keys = ON;
+
+-- 1. Table des domaines d'activité (bilingue FR / AR)
+CREATE TABLE domains (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name_fr TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL UNIQUE
+);
+
+-- 2. Table des localisations (villes / wilayas, bilingue FR / AR)
+CREATE TABLE locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    city_fr TEXT NOT NULL,
+    city_ar TEXT NOT NULL,
+    region_fr TEXT,
+    region_ar TEXT,
+    UNIQUE(city_fr, region_fr)
+);
+
+-- 3. Table des entreprises
+CREATE TABLE companies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sector_fr TEXT,
+    sector_ar TEXT,
+    description_fr TEXT,
+    description_ar TEXT,
+    website TEXT,
+    logo_url TEXT
+);
+
+-- 4. Table des compétences
+CREATE TABLE skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name_fr TEXT NOT NULL UNIQUE,
+    name_ar TEXT NOT NULL UNIQUE
+);
+
+-- 5. Table du profil étudiant (un seul profil local)
+CREATE TABLE student_profiles (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    full_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    university TEXT,
+    degree_level TEXT,
+    bio TEXT,
+    cv_uri TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 6. Table des offres de stage
+CREATE TABLE offers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    domain_id INTEGER NOT NULL,
+    location_id INTEGER NOT NULL,
+    title_fr TEXT NOT NULL,
+    title_ar TEXT NOT NULL,
+    description_fr TEXT NOT NULL,
+    description_ar TEXT NOT NULL,
+    duration_months INTEGER NOT NULL CHECK (duration_months > 0),
+    is_paid INTEGER NOT NULL DEFAULT 0 CHECK (is_paid IN (0, 1)),
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'CLOSED')),
+    deadline TEXT NOT NULL, -- Format ISO: YYYY-MM-DD
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE RESTRICT,
+    FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT
+);
+
+-- 7. Table d'association Offres <-> Compétences (Relation N:N)
+CREATE TABLE offer_skills (
+    offer_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL,
+    PRIMARY KEY (offer_id, skill_id),
+    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE,
+    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+);
+
+-- 8. Table des favoris (une offre ne peut être mise en favori qu'une seule fois)
+CREATE TABLE favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    offer_id INTEGER NOT NULL UNIQUE,
+    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+);
+
+-- 9. Table des candidatures (une seule candidature par offre, référence unique)
+CREATE TABLE applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference TEXT NOT NULL UNIQUE, -- Ex: FS-2026-0001
+    offer_id INTEGER NOT NULL UNIQUE,
+    applicant_name TEXT NOT NULL,
+    applicant_email TEXT NOT NULL,
+    applicant_phone TEXT NOT NULL,
+    cover_letter TEXT,
+    cv_uri TEXT,
+    current_status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (
+        current_status IN ('SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW_SCHEDULED', 'ACCEPTED', 'REJECTED', 'CANCELLED')
+    ),
+    applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+);
+
+-- 10. Table de l'historique des statuts de candidature
+CREATE TABLE status_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    old_status TEXT CHECK (
+        old_status IN ('SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW_SCHEDULED', 'ACCEPTED', 'REJECTED', 'CANCELLED')
+    ),
+    new_status TEXT NOT NULL CHECK (
+        new_status IN ('SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW_SCHEDULED', 'ACCEPTED', 'REJECTED', 'CANCELLED')
+    ),
+    changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    note TEXT,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
+);
+
+-- Index utiles pour optimiser la recherche et le filtrage
+CREATE INDEX idx_offers_domain ON offers(domain_id);
+CREATE INDEX idx_offers_location ON offers(location_id);
+CREATE INDEX idx_offers_deadline ON offers(deadline);
+CREATE INDEX idx_offers_status ON offers(status);
+CREATE INDEX idx_status_history_app ON status_history(application_id);
+
+
+
+
+
+
+
+
+
+
+
+
+
+Requêtes SQL de vérification
+
+
+Requête 1 : Recherche multicritères des offres ouvertes (Domaine + Localisation + Mot-clé)
+
+sql
+SELECT 
+    o.id,
+    o.title_fr,
+    o.title_ar,
+    c.name AS company_name,
+    d.name_fr AS domain,
+    l.city_fr AS location,
+    o.deadline
+FROM offers o
+JOIN companies c ON o.company_id = c.id
+JOIN domains d ON o.domain_id = d.id
+JOIN locations l ON o.location_id = l.id
+WHERE o.status = 'OPEN'
+  AND o.deadline >= date('now')
+  AND o.domain_id = 1             -- Paramètre : ID du domaine
+  AND o.location_id = 1           -- Paramètre : ID de la localisation
+  AND (
+      o.title_fr LIKE '%Android%' 
+      OR o.title_ar LIKE '%Android%' 
+      OR o.description_fr LIKE '%Android%'
+  )
+ORDER BY o.deadline ASC;
+
+
+
+
+
+
+
+Requête 2 : Nombre d'offres par domaine
+
+sql
+SELECT 
+    d.id,
+    d.name_fr,
+    d.name_ar,
+    COUNT(o.id) AS total_offers
+FROM domains d
+LEFT JOIN offers o ON d.id = o.domain_id
+GROUP BY d.id, d.name_fr, d.name_ar
+ORDER BY total_offers DESC;
+
+
+
+
+
+
+
+
+Requête 3 : Liste des offres favorites avec le statut de candidature associé
+
+sql
+SELECT 
+    f.id AS favorite_id,
+    f.added_at,
+    o.id AS offer_id,
+    o.title_fr,
+    o.title_ar,
+    c.name AS company_name,
+    o.status AS offer_status,
+    COALESCE(a.current_status, 'NOT_APPLIED') AS application_status,
+    a.reference AS application_reference
+FROM favorites f
+JOIN offers o ON f.offer_id = o.id
+JOIN companies c ON o.company_id = c.id
+LEFT JOIN applications a ON o.id = a.offer_id
+ORDER BY f.added_at DESC;
+
+
+
+
+
+

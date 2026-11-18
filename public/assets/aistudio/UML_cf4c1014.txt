@@ -1,0 +1,41 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Étudiant / Stagiaire" as Etudiant
+actor "Système (Local DB)" as Systeme
+
+rectangle "Application FIRSTSTEP (Hors-ligne)" {
+  usecase "Consulter la liste des offres" as UC1
+  usecase "Rechercher par mot-clé" as UC2
+  usecase "Filtrer les offres\n(Domaine / Lieu)" as UC3
+  usecase "Consulter le détail d'une offre" as UC4
+  usecase "Gérer les favoris" as UC5
+  usecase "Postuler à une offre" as UC6
+  usecase "Valider le formulaire" as UC7
+  usecase "Générer référence unique\n(FS-2026-XXXX)" as UC8
+  usecase "Suivre mes candidatures\net l'historique" as UC9
+  usecase "Mettre à jour le statut" as UC10
+  usecase "Gérer le profil et paramètres\n(Langue FR/AR, Thème)" as UC11
+  usecase "Charger le dataset initial" as UC12
+
+  Etudiant --> UC1
+  Etudiant --> UC4
+  Etudiant --> UC5
+  Etudiant --> UC6
+  Etudiant --> UC9
+  Etudiant --> UC11
+
+  UC2 .> UC1 : <<extend>>
+  UC3 .> UC1 : <<extend>>
+  UC4 .> UC1 : <<extend>>
+  UC5 .> UC4 : <<extend>>
+  UC6 .> UC4 : <<extend>>
+  UC6 .> UC7 : <<include>>
+  UC6 .> UC8 : <<include>>
+  UC10 .> UC9 : <<extend>>
+
+  Systeme --> UC12
+  Systeme --> UC8
+}
+@enduml
