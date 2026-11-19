@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Work
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -43,10 +45,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -65,7 +71,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.olympiades.firststep.FirstStepContainer
+import com.olympiades.firststep.domain.assistant.AssistantNavTarget
 import com.olympiades.firststep.domain.model.AppLanguage
+import com.olympiades.firststep.ui.components.OfflineAssistantSheet
 import com.olympiades.firststep.ui.components.PinLockScreen
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
 import com.olympiades.firststep.ui.i18n.stringsFor
@@ -83,6 +91,7 @@ import com.olympiades.firststep.ui.viewmodel.FavoritesViewModel
 import com.olympiades.firststep.ui.viewmodel.FirstStepViewModelFactory
 import com.olympiades.firststep.ui.viewmodel.OfferDetailViewModel
 import com.olympiades.firststep.ui.viewmodel.OffersViewModel
+import com.olympiades.firststep.ui.viewmodel.OfflineAssistantViewModel
 import com.olympiades.firststep.ui.viewmodel.ProfileViewModel
 import kotlinx.coroutines.launch
 
@@ -161,9 +170,23 @@ private fun FirstStepNavScaffold(
     val favoritesViewModel: FavoritesViewModel = viewModel(factory = rootFactory)
     val applicationsViewModel: ApplicationsViewModel = viewModel(factory = rootFactory)
     val profileViewModel: ProfileViewModel = viewModel(factory = rootFactory)
+    val assistantViewModel: OfflineAssistantViewModel = viewModel(factory = rootFactory)
+
+    val assistantMessages by assistantViewModel.messages.collectAsStateWithLifecycle()
+    val assistantQuickQuestions by assistantViewModel.quickQuestions.collectAsStateWithLifecycle()
+    var showAssistantSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(currentRoute) {
+        assistantViewModel.onRouteChanged(currentRoute)
+    }
+
+    fun openAssistant() {
+        assistantViewModel.onAssistantOpened(currentRoute)
+        showAssistantSheet = true
+    }
 
     val tabs = listOf(
         BottomNavTab(
@@ -221,6 +244,29 @@ private fun FirstStepNavScaffold(
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            floatingActionButton = {
+                AnimatedVisibility(
+                    visible = showTopLevelNav,
+                    enter = scaleIn(tween(180)) + fadeIn(tween(180)),
+                    exit = scaleOut(tween(140)) + fadeOut(tween(140))
+                ) {
+                    ExtendedFloatingActionButton(
+                        onClick = ::openAssistant,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                                contentDescription = strings.helpButtonCd
+                            )
+                        },
+                        text = {
+                            Text(text = strings.helpButtonLabel)
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = Color.White,
+                        modifier = Modifier.testTag("help_assistant_button")
+                    )
+                }
+            },
             bottomBar = {
                 if (showTopLevelNav && !useNavigationRail) {
                     NavigationBar(
@@ -368,7 +414,8 @@ private fun FirstStepNavScaffold(
                                 onNavigateBack = { navController.popBackStack() },
                                 onApplyClick = { id ->
                                     navController.navigate(FirstStepRoutes.applicationForm(id))
-                                }
+                                },
+                                onHelpClick = ::openAssistant
                             )
                         }
 
@@ -417,12 +464,40 @@ private fun FirstStepNavScaffold(
                                             strings.submitSuccessSnackbar(reference)
                                         )
                                     }
-                                }
+                                },
+                                onHelpClick = ::openAssistant
                             )
                         }
                     }
                 }
             }
+        }
+
+        if (showAssistantSheet) {
+            OfflineAssistantSheet(
+                messages = assistantMessages,
+                quickQuestions = assistantQuickQuestions,
+                inputQuery = assistantViewModel.inputQuery,
+                onInputChange = assistantViewModel::updateInputQuery,
+                onSendQuestion = assistantViewModel::sendUserQuestion,
+                onQuickQuestionClick = assistantViewModel::askQuickQuestion,
+                onOfferClick = { offerId ->
+                    showAssistantSheet = false
+                    navController.navigate(FirstStepRoutes.offerDetail(offerId))
+                },
+                onNavigateTarget = { target ->
+                    showAssistantSheet = false
+                    val route = when (target) {
+                        AssistantNavTarget.OFFERS -> FirstStepRoutes.OFFERS
+                        AssistantNavTarget.FAVORITES -> FirstStepRoutes.FAVORITES
+                        AssistantNavTarget.APPLICATIONS -> FirstStepRoutes.APPLICATIONS
+                        AssistantNavTarget.PROFILE -> FirstStepRoutes.PROFILE
+                    }
+                    navigateToTab(route)
+                },
+                onResetConversation = assistantViewModel::resetConversation,
+                onDismiss = { showAssistantSheet = false }
+            )
         }
     }
 }

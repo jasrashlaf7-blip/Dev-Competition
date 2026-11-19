@@ -61,6 +61,7 @@ class UserPreferencesDataStore(private val context: Context) {
         .map { prefs ->
             val language = when (prefs[Keys.LANGUAGE]) {
                 AppLanguage.AR.code -> AppLanguage.AR
+                AppLanguage.EN.code -> AppLanguage.EN
                 else -> AppLanguage.FR
             }
             val theme = when (prefs[Keys.THEME_MODE]) {

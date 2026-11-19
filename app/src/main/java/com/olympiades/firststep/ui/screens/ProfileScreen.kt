@@ -194,7 +194,7 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .widthIn(max = 680.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 84.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Student Profile Card
@@ -439,15 +439,23 @@ fun ProfileScreen(
                                 SegmentedButton(
                                     selected = uiState.language == AppLanguage.FR,
                                     onClick = { viewModel.setLanguage(AppLanguage.FR) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                                     modifier = Modifier.testTag("lang_fr_button")
                                 ) {
                                     Text(text = "FR", fontWeight = FontWeight.SemiBold)
                                 }
                                 SegmentedButton(
+                                    selected = uiState.language == AppLanguage.EN,
+                                    onClick = { viewModel.setLanguage(AppLanguage.EN) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                    modifier = Modifier.testTag("lang_en_button")
+                                ) {
+                                    Text(text = "EN", fontWeight = FontWeight.SemiBold)
+                                }
+                                SegmentedButton(
                                     selected = uiState.language == AppLanguage.AR,
                                     onClick = { viewModel.setLanguage(AppLanguage.AR) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                     modifier = Modifier.testTag("lang_ar_button")
                                 ) {
                                     Text(text = "AR", fontWeight = FontWeight.SemiBold)

@@ -35,10 +35,15 @@ import com.olympiades.firststep.domain.usecase.GetFilteredOffersUseCase
 import com.olympiades.firststep.domain.usecase.ManageOfferUseCase
 import com.olympiades.firststep.domain.usecase.ToggleFavoriteUseCase
 import com.olympiades.firststep.domain.usecase.UpdateApplicationStatusUseCase
+import com.olympiades.firststep.domain.assistant.AssistantContext
+import com.olympiades.firststep.domain.assistant.AssistantTopic
+import com.olympiades.firststep.domain.assistant.OfflineAssistantEngine
+import com.olympiades.firststep.ui.i18n.stringsFor
 import com.olympiades.firststep.ui.viewmodel.ApplicationsUiState
 import com.olympiades.firststep.ui.viewmodel.ApplicationsViewModel
 import com.olympiades.firststep.ui.viewmodel.OffersUiState
 import com.olympiades.firststep.ui.viewmodel.OffersViewModel
+import com.olympiades.firststep.ui.viewmodel.OfflineAssistantViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -418,6 +423,99 @@ class ModuleCSecurityAndMigrationTest {
 
             vm.toggleFavorite(101L)
             assertTrue(fakeRepo.favoriteIds.contains(101L))
+        } finally {
+            viewModelStore.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `offline assistant engine provides bilingual guide answers and live offer recommendations`() = runTest {
+        repository.ensureInitialized()
+        val offers = repository.observeFilteredOffers(OfferFilterCriteria()).first()
+        val overdueApp = buildSampleApplication(ApplicationStatus.SUBMITTED, appliedAt = "2026-11-01")
+
+        val frContext = AssistantContext(
+            language = AppLanguage.FR,
+            currentRoute = "offers",
+            offers = offers,
+            favorites = emptyList(),
+            applications = listOf(overdueApp),
+            profile = null,
+            todayIso = "2026-11-19"
+        )
+
+        val welcome = OfflineAssistantEngine.welcomeMessage(frContext)
+        assertTrue(welcome.message.contains("100 % local"))
+        assertTrue(welcome.message.contains("1 candidature(s) sans réponse"))
+        assertTrue(welcome.followUpQuestions.isNotEmpty())
+
+        val recommended = OfflineAssistantEngine.answerTopic(AssistantTopic.RECOMMEND_BEST_OFFERS, frContext)
+        assertTrue(recommended.suggestedOffers.isNotEmpty())
+
+        val csvHelp = OfflineAssistantEngine.answerQuestion("Comment exporter mes candidatures en CSV ?", frContext)
+        assertTrue(csvHelp.message.contains("CSV", ignoreCase = true))
+
+        val cityQuery = OfflineAssistantEngine.answerQuestion("Oran", frContext)
+        assertTrue(cityQuery.suggestedOffers.isNotEmpty())
+
+        val arContext = frContext.copy(language = AppLanguage.AR, currentRoute = "applications")
+        val arQuestions = OfflineAssistantEngine.quickQuestionsFor(arContext)
+        assertEquals(AssistantTopic.CHECK_MY_APPLICATIONS, arQuestions.first().topic)
+
+        val arSummary = OfflineAssistantEngine.answerTopic(AssistantTopic.CHECK_MY_APPLICATIONS, arContext)
+        assertTrue(arSummary.message.contains("FS-2026-0001"))
+
+        val enContext = frContext.copy(language = AppLanguage.EN, currentRoute = "offers")
+        val enWelcome = OfflineAssistantEngine.welcomeMessage(enContext)
+        assertTrue(enWelcome.message.contains("100% local"))
+        val enApplyHelp = OfflineAssistantEngine.answerQuestion("How do I apply with my PDF CV?", enContext)
+        assertTrue(enApplyHelp.message.contains("APPLY NOW"))
+        val enStrings = stringsFor(AppLanguage.EN)
+        assertEquals("Help ?", enStrings.helpButtonLabel)
+        assertEquals("FIRSTSTEP – Internships", enStrings.appTitleOffers)
+    }
+
+    @Test
+    fun `user preferences persist English language selection`() = runTest {
+        val prefs = UserPreferencesDataStore(context)
+        prefs.setLanguage(AppLanguage.EN)
+        assertEquals(AppLanguage.EN, prefs.preferencesFlow.first().language)
+        prefs.setLanguage(AppLanguage.FR)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `offline assistant viewmodel answers quick question buttons and free text offline`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        val viewModelStore = ViewModelStore()
+        val fakeRepo = FakeFirstStepRepository()
+        try {
+            val factory = object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return OfflineAssistantViewModel(fakeRepo) as T
+                }
+            }
+            val vm = ViewModelProvider(viewModelStore, factory)[OfflineAssistantViewModel::class.java]
+            vm.onAssistantOpened("offers")
+
+            val initialMessages = vm.messages.value
+            assertEquals(1, initialMessages.size)
+            assertFalse(initialMessages.first().isFromUser)
+
+            val firstQuestion = vm.quickQuestions.first { it.isNotEmpty() }.first()
+            vm.askQuickQuestion(firstQuestion)
+            assertEquals(3, vm.messages.value.size)
+            assertTrue(vm.messages.value[1].isFromUser)
+            assertFalse(vm.messages.value[2].isFromUser)
+
+            vm.updateInputQuery("Kotlin Oran")
+            vm.sendUserQuestion()
+            assertEquals(5, vm.messages.value.size)
+            assertEquals("", vm.inputQuery)
+            assertTrue(vm.messages.value.last().suggestedOffers.any { it.offerId == 101L })
         } finally {
             viewModelStore.clear()
             Dispatchers.resetMain()

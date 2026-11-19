@@ -25,7 +25,8 @@ enum class OfferSortOption {
 
 enum class AppLanguage(val code: String) {
     FR("fr"),
-    AR("ar")
+    AR("ar"),
+    EN("en")
 }
 
 enum class AppThemeMode(val key: String) {

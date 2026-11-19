@@ -22,9 +22,8 @@ import com.olympiades.firststep.domain.model.OfferSortOption
 import com.olympiades.firststep.domain.model.OfferStatus
 import com.olympiades.firststep.domain.model.StudentProfile
 import com.olympiades.firststep.domain.repository.FirstStepRepository
+import com.olympiades.firststep.domain.model.SearchTextNormalizer
 import com.olympiades.firststep.domain.validation.ApplicationStateMachine
-import java.text.Normalizer
-import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -396,41 +395,15 @@ class FirstStepRepositoryImpl(
 
     companion object {
         private val TOKEN_SPLIT_REGEX = Regex("[\\s\\-_/.,;:'’\"()\\[\\]{}|\\\\]+")
-        private val DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
-        private val ARABIC_DIACRITICS_AND_TATWEEL_REGEX = Regex("[\\u0640\\u064B-\\u065F\\u0670]")
 
-        internal fun sanitizeInputQuery(raw: String): String {
-            return raw
-                .filter { ch -> !ch.isISOControl() }
-                .take(100)
-        }
+        internal fun sanitizeInputQuery(raw: String): String =
+            SearchTextNormalizer.sanitizeInputQuery(raw).take(100)
 
-        internal fun normalizeSearchText(input: String): String {
-            if (input.isBlank()) return ""
-            val preNormalized = input
-                .replace("œ", "oe")
-                .replace("Œ", "oe")
-                .replace("æ", "ae")
-                .replace("Æ", "ae")
-            val decomposed = Normalizer.normalize(preNormalized, Normalizer.Form.NFD)
-            val withoutMarks = DIACRITICS_REGEX.replace(decomposed, "")
-            val arabicCleaned = ARABIC_DIACRITICS_AND_TATWEEL_REGEX.replace(withoutMarks, "")
-                .replace('أ', 'ا')
-                .replace('إ', 'ا')
-                .replace('آ', 'ا')
-                .replace('ٱ', 'ا')
-                .replace('ة', 'ه')
-                .replace('ى', 'ي')
-                .replace('ؤ', 'و')
-                .replace('ئ', 'ي')
-            return arabicCleaned.lowercase(Locale.ROOT)
-        }
+        internal fun normalizeSearchText(input: String): String =
+            SearchTextNormalizer.normalizeSearchText(input)
 
-        internal fun tokenizeQuery(query: String): List<String> {
-            val normalized = normalizeSearchText(query).trim()
-            if (normalized.isEmpty()) return emptyList()
-            return normalized.split(TOKEN_SPLIT_REGEX).filter { it.isNotBlank() }
-        }
+        internal fun tokenizeQuery(query: String): List<String> =
+            SearchTextNormalizer.tokenizeQuery(query)
 
         private fun normalizeIndexedField(raw: String): Pair<String, String> {
             val spaced = TOKEN_SPLIT_REGEX.replace(normalizeSearchText(raw), " ")

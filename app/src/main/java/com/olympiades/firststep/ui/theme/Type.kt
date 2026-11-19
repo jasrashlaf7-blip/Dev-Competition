@@ -25,7 +25,7 @@ val CairoFontFamily = FontFamily(
 
 fun firstStepTypography(language: AppLanguage): Typography {
     return when (language) {
-        AppLanguage.FR -> Typography(
+        AppLanguage.FR, AppLanguage.EN -> Typography(
             headlineMedium = TextStyle(
                 fontFamily = InterFontFamily,
                 fontWeight = FontWeight.SemiBold,

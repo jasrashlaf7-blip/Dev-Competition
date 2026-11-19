@@ -32,10 +32,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -81,7 +81,6 @@ import com.olympiades.firststep.ui.components.ApplicationStatusBadge
 import com.olympiades.firststep.ui.components.EmptyStateView
 import com.olympiades.firststep.ui.components.ErrorStateView
 import com.olympiades.firststep.ui.components.LoadingStateView
-import com.olympiades.firststep.ui.components.OfferEditorDialog
 import com.olympiades.firststep.ui.components.StatusBadge
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
 import com.olympiades.firststep.ui.theme.FavoriteHeartColor
@@ -98,13 +97,13 @@ fun OfferDetailScreen(
     viewModel: OfferDetailViewModel,
     onNavigateBack: () -> Unit,
     onApplyClick: (Long) -> Unit,
+    onHelpClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val todayIso = remember { DateTimeHelper.todayIso() }
     val snackbarHostState = remember { SnackbarHostState() }
-    var showEditOfferDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(strings) {
         viewModel.events.collect { event ->
@@ -117,39 +116,6 @@ fun OfferDetailScreen(
                 }
             }
         }
-    }
-
-    val successState = uiState as? OfferDetailUiState.Success
-    if (showEditOfferDialog && successState != null) {
-        OfferEditorDialog(
-            existingOffer = successState.offer,
-            companies = successState.companies,
-            domains = successState.domains,
-            locations = successState.locations,
-            onDismiss = { showEditOfferDialog = false },
-            onSave = { companyId, domainId, locationId, titleFr, titleAr, descFr, descAr, months, isPaid, stipend, startDate, status, deadline ->
-                viewModel.updateOffer(
-                    companyId = companyId,
-                    domainId = domainId,
-                    locationId = locationId,
-                    titleFr = titleFr,
-                    titleAr = titleAr,
-                    descriptionFr = descFr,
-                    descriptionAr = descAr,
-                    durationMonths = months,
-                    isPaid = isPaid,
-                    monthlyStipendDzd = stipend,
-                    startDate = startDate,
-                    status = status,
-                    deadline = deadline
-                )
-                showEditOfferDialog = false
-            },
-            onDelete = {
-                showEditOfferDialog = false
-                viewModel.deleteOffer()
-            }
-        )
     }
 
     Scaffold(
@@ -202,18 +168,6 @@ fun OfferDetailScreen(
                             label = "detail_heart_tint"
                         )
                         IconButton(
-                            onClick = { showEditOfferDialog = true },
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("detail_edit_offer_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Edit,
-                                contentDescription = strings.editOfferButtonCd,
-                                tint = Color.White
-                            )
-                        }
-                        IconButton(
                             onClick = viewModel::toggleFavorite,
                             modifier = Modifier
                                 .minimumInteractiveComponentSize()
@@ -237,6 +191,18 @@ fun OfferDetailScreen(
                                 }
                             )
                         }
+                    }
+                    IconButton(
+                        onClick = onHelpClick,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("detail_help_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                            contentDescription = strings.helpButtonCd,
+                            tint = Color.White
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

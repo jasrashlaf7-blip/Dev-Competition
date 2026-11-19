@@ -53,6 +53,9 @@ class FirstStepViewModelFactory(
                     studentProfileUseCase = container.studentProfileUseCase
                 ) as T
             }
+            modelClass.isAssignableFrom(OfflineAssistantViewModel::class.java) -> {
+                OfflineAssistantViewModel(container.repository) as T
+            }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

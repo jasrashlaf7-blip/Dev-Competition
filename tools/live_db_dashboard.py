@@ -26,7 +26,7 @@ import webbrowser
 from pathlib import Path
 
 PACKAGE_ID = "com.aistudio.firststep.oran26"
-MAIN_ACTIVITY = "com.olympiades.firststep.MainActivity"
+MAIN_ACTIVITY = "com.example.MainActivity"
 DB_REMOTE_PATH = "databases/firststep_offline.db"
 HOST = "127.0.0.1"
 PORT = 8765
@@ -139,29 +139,61 @@ class LiveDbBridge:
     def _push_db_to_phone(self) -> tuple[bool, str | None]:
         if not self.adb_path or not self._db_file.exists():
             return False, "ADB or local database snapshot unavailable."
+        tmp_remote = "/data/local/tmp/firststep_push.db"
         try:
-            db_bytes = self._db_file.read_bytes()
             subprocess.run(
                 [self.adb_path, "shell", "am", "force-stop", PACKAGE_ID],
                 capture_output=True,
                 timeout=5,
             )
-            push_res = subprocess.run(
+            push_file = subprocess.run(
+                [self.adb_path, "push", str(self._db_file), tmp_remote],
+                capture_output=True,
+                timeout=10,
+            )
+            if push_file.returncode != 0:
+                err = (push_file.stderr or push_file.stdout).decode("utf-8", errors="ignore").strip()
+                return False, err or "adb push failed."
+
+            subprocess.run(
+                [self.adb_path, "shell", "chmod", "644", tmp_remote],
+                capture_output=True,
+                timeout=5,
+            )
+            subprocess.run(
+                [self.adb_path, "shell", "run-as", PACKAGE_ID, "mkdir", "-p", "databases"],
+                capture_output=True,
+                timeout=5,
+            )
+            subprocess.run(
                 [
                     self.adb_path,
                     "shell",
                     "run-as",
                     PACKAGE_ID,
-                    "sh",
-                    "-c",
-                    f"rm -f {DB_REMOTE_PATH}-wal {DB_REMOTE_PATH}-shm {DB_REMOTE_PATH}-journal && cat > {DB_REMOTE_PATH}",
+                    "rm",
+                    "-f",
+                    f"{DB_REMOTE_PATH}-wal",
+                    f"{DB_REMOTE_PATH}-shm",
+                    f"{DB_REMOTE_PATH}-journal",
                 ],
-                input=db_bytes,
+                capture_output=True,
+                timeout=5,
+            )
+            copy_res = subprocess.run(
+                [self.adb_path, "shell", "run-as", PACKAGE_ID, "cp", tmp_remote, DB_REMOTE_PATH],
                 capture_output=True,
                 timeout=10,
             )
-            if push_res.returncode != 0:
-                return False, push_res.stderr.decode("utf-8", errors="ignore").strip() or "Failed pushing DB."
+            subprocess.run(
+                [self.adb_path, "shell", "rm", "-f", tmp_remote],
+                capture_output=True,
+                timeout=5,
+            )
+            if copy_res.returncode != 0:
+                err = (copy_res.stderr or copy_res.stdout).decode("utf-8", errors="ignore").strip()
+                return False, err or "Failed copying DB into app sandbox."
+
             subprocess.run(
                 [self.adb_path, "shell", "am", "start", "-n", f"{PACKAGE_ID}/{MAIN_ACTIVITY}"],
                 capture_output=True,
