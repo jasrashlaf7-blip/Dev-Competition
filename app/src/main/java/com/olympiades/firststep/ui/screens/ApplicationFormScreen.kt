@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -140,7 +141,7 @@ fun ApplicationFormScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .widthIn(max = 600.dp)
-                            .height(50.dp)
+                            .heightIn(min = 50.dp)
                             .testTag("submit_application_button"),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -314,7 +315,7 @@ fun ApplicationFormScreen(
                         onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("form_attach_cv_button"),
                         shape = RoundedCornerShape(12.dp)
                     ) {

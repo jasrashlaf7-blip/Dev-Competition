@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FirstStep — Live SQLite Editor &amp; Viewer (PC ↔ Phone)</title>
+  <style>
+    :root {
+      --primary: #1565C0;
+      --secondary: #00897B;
+      --danger: #C62828;
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --text: #0F172A;
+      --muted: #64748B;
+      --border: #E2E8F0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: linear-gradient(135deg, #132248, #1565C0);
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; font-size: 13px; opacity: 0.88; }
+    .status-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.16);
+    }
+    .pill.live { background: #16A34A; }
+    .pill.warn { background: #D97706; }
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: #132248;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn.primary { background: var(--primary); color: #fff; }
+    .btn.secondary { background: var(--secondary); color: #fff; }
+    .btn.danger { background: var(--danger); color: #fff; }
+    .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn.sm { padding: 5px 10px; font-size: 12px; }
+    main { max-width: 1340px; margin: 20px auto; padding: 0 18px 48px; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    .kpi-val { font-size: 26px; font-weight: 800; color: var(--primary); margin-top: 4px; }
+    .banner {
+      padding: 11px 14px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      display: none;
+    }
+    .banner.warn { background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; }
+    .banner.ok { background: #DCFCE7; border: 1px solid #22C55E; color: #166534; }
+    .banner.err { background: #FEE2E2; border: 1px solid #EF4444; color: #991B1B; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    .tab-btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { font-size: 11px; text-transform: uppercase; color: var(--muted); background: #F1F5F9; }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--primary);
+    }
+    .badge.SUBMITTED { background: #1976D2; }
+    .badge.UNDER_REVIEW { background: #F57C00; }
+    .badge.INTERVIEW_SCHEDULED { background: #7B1FA2; }
+    .badge.ACCEPTED { background: #2E7D32; }
+    .badge.REJECTED { background: #C62828; }
+    .badge.CANCELLED, .badge.CLOSED { background: #616161; }
+    .badge.OPEN, .badge.PAID { background: #00897B; }
+    .history-list { margin: 6px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .field input, .field select, .field textarea {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+    .inline-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .sql-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .sql-input {
+      flex: 1;
+      min-width: 260px;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+    }
+    .card-box {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 16px;
+      background: #F8FAFC;
+    }
+    .card-box h3 { margin: 0 0 10px; font-size: 15px; }
+    .empty { padding: 28px; text-align: center; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>FirstStep — Live SQLite Editor &amp; Monitor (PC ↔ Phone)</h1>
+      <p>Inspect, enter &amp; modify SQLite records (<code>firststep_offline.db</code>) and push live to your Android device</p>
+    </div>
+    <div class="status-bar">
+      <span id="statusPill" class="pill warn">Connecting...</span>
+      <span id="devicePill" class="pill">Device: —</span>
+      <span id="syncPill" class="pill">Last sync: —</span>
+      <button class="btn" id="pauseBtn" onclick="togglePause()">Pause Sync</button>
+      <button class="btn secondary" onclick="restartPhoneApp()">Reload Phone App</button>
+      <a class="btn" href="/api/download">Download .db</a>
+    </div>
+  </header>
+
+  <main>
+    <div id="infoBanner" class="banner warn"></div>
+    <div id="toastBanner" class="banner ok"></div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Offers</div><div class="kpi-val" id="kpiOffers">—</div></div>
+      <div class="kpi"><div class="kpi-label">Favorites</div><div class="kpi-val" id="kpiFavorites">—</div></div>
+      <div class="kpi"><div class="kpi-label">Applications</div><div class="kpi-val" id="kpiApps">—</div></div>
+      <div class="kpi"><div class="kpi-label">Wilayas (States)</div><div class="kpi-val" id="kpiLocations">—</div></div>
+      <div class="kpi"><div class="kpi-label">History Logs</div><div class="kpi-val" id="kpiHistory">—</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('applications', this)">Applications (Edit Status)</button>
+      <button class="tab-btn" onclick="switchTab('favorites', this)">Favorites &amp; Notes</button>
+      <button class="tab-btn" onclick="switchTab('offers', this)">Offers (Add / Edit / Delete)</button>
+      <button class="tab-btn" onclick="switchTab('profile', this)">Student Profile</button>
+      <button class="tab-btn" onclick="switchTab('sql', this)">SQL Editor Console</button>
+    </div>
+
+    <div class="panel" id="panelContent">
+      <div class="empty">Connecting to local dashboard server...</div>
+    </div>
+  </main>
+
+  <script>
+    let currentTab = 'applications';
+    let lastData = null;
+    let isPaused = false;
+    let activeSql = 'SELECT id, offer_id, offer_title_fr, company_name, city_fr, monthly_stipend_dzd, start_date, deadline, personal_note, added_at FROM favorites ORDER BY id DESC';
+
+    const STATUS_OPTIONS = ['SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW_SCHEDULED', 'ACCEPTED', 'REJECTED', 'CANCELLED'];
+
+    function esc(v) {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showToast(msg, isError = false) {
+      const b = document.getElementById('toastBanner');
+      b.className = 'banner ' + (isError ? 'err' : 'ok');
+      b.textContent = msg;
+      b.style.display = 'block';
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => { b.style.display = 'none'; }, 5000);
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      document.getElementById('pauseBtn').textContent = isPaused ? 'Resume Sync' : 'Pause Sync';
+    }
+
+    function isUserTyping() {
+      const el = document.activeElement;
+      return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+    }
+
+    function switchTab(tab, btn) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render(true);
+    }
+
+    async function postJson(url, payload) {
+      if (window.location.protocol === 'file:') {
+        showToast('Open via Start_Live_DB_Viewer.bat (http://127.0.0.1:8765) to write changes back to your phone.', true);
+        return null;
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        showToast(json.error || 'Operation failed', true);
+      } else {
+        showToast(json.message || 'Saved and synced to phone!');
+        await fetchSnapshot(true);
+      }
+      return json;
+    }
+
+    async function restartPhoneApp() {
+      await postJson('/api/app/restart', {});
+    }
+
+    async function saveAppStatus(appId) {
+      const newStatus = document.getElementById(`appStatus_${appId}`).value;
+      const note = document.getElementById(`appNote_${appId}`).value;
+      await postJson('/api/applications/status', { applicationId: appId, newStatus, note });
+    }
+
+    async function saveFavNote(offerId) {
+      const note = document.getElementById(`favNote_${offerId}`).value;
+      await postJson('/api/favorites/note', { offerId, personalNote: note });
+    }
+
+    async function toggleFavorite(offerId) {
+      await postJson('/api/favorites/toggle', { offerId: Number(offerId) });
+    }
+
+    async function saveProfile(ev) {
+      ev.preventDefault();
+      await postJson('/api/profile/update', {
+        full_name: document.getElementById('profName').value,
+        email: document.getElementById('profEmail').value,
+        phone: document.getElementById('profPhone').value,
+        university: document.getElementById('profUniv').value,
+        degree_level: document.getElementById('profDegree').value,
+        bio: document.getElementById('profBio').value
+      });
+    }
+
+    async function createOfferFromForm(ev) {
+      ev.preventDefault();
+      await postJson('/api/offers/save', {
+        id: document.getElementById('offerEditId').value ? Number(document.getElementById('offerEditId').value) : null,
+        company_id: Number(document.getElementById('offerCompany').value),
+        domain_id: Number(document.getElementById('offerDomain').value),
+        location_id: Number(document.getElementById('offerLocation').value),
+        title_fr: document.getElementById('offerTitleFr').value,
+        title_ar: document.getElementById('offerTitleAr').value,
+        description_fr: document.getElementById('offerDescFr').value,
+        description_ar: document.getElementById('offerDescAr').value,
+        duration_months: Number(document.getElementById('offerDuration').value),
+        is_paid: document.getElementById('offerPaid').checked,
+        monthly_stipend_dzd: Number(document.getElementById('offerStipend').value || 0),
+        start_date: document.getElementById('offerStartDate').value,
+        deadline: document.getElementById('offerDeadline').value,
+        status: document.getElementById('offerStatus').value
+      });
+      resetOfferForm();
+    }
+
+    function editOffer(offerId) {
+      const o = (lastData?.offers || []).find(x => Number(x.id) === Number(offerId));
+      if (!o) return;
+      document.getElementById('offerEditId').value = o.id;
+      document.getElementById('offerFormHeading').textContent = `Edit Offer #${o.id}`;
+      document.getElementById('offerCompany').value = o.company_id;
+      document.getElementById('offerDomain').value = o.domain_id;
+      document.getElementById('offerLocation').value = o.location_id;
+      document.getElementById('offerTitleFr').value = o.title_fr;
+      document.getElementById('offerTitleAr').value = o.title_ar;
+      document.getElementById('offerDescFr').value = o.description_fr;
+      document.getElementById('offerDescAr').value = o.description_ar;
+      document.getElementById('offerDuration').value = o.duration_months;
+      document.getElementById('offerPaid').checked = !!o.is_paid;
+      document.getElementById('offerStipend').value = o.monthly_stipend_dzd || 0;
+      document.getElementById('offerStartDate').value = o.start_date || '2026-12-01';
+      document.getElementById('offerDeadline').value = o.deadline;
+      document.getElementById('offerStatus').value = o.status;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetOfferForm() {
+      const f = document.getElementById('offerForm');
+      if (f) f.reset();
+      const hid = document.getElementById('offerEditId');
+      if (hid) hid.value = '';
+      const h = document.getElementById('offerFormHeading');
+      if (h) h.textContent = 'Add New Offer directly into Phone SQLite';
+    }
+
+    async function deleteOffer(offerId) {
+      if (!confirm(`Delete Offer #${offerId} from phone database?`)) return;
+      await postJson('/api/offers/delete', { offerId });
+    }
+
+    async function runCustomSql() {
+      const inp = document.getElementById('sqlInput');
+      if (inp) activeSql = inp.value;
+      const res = await postJson('/api/sql', { sql: activeSql });
+      if (res && res.result) {
+        lastData.customQuery = res.result;
+        renderSqlResultsOnly();
+      }
+    }
+
+    function presetSql(sql) {
+      activeSql = sql;
+      const inp = document.getElementById('sqlInput');
+      if (inp) inp.value = sql;
+      runCustomSql();
+    }
+
+    function renderSqlResultsOnly() {
+      const container = document.getElementById('sqlResultsOnly');
+      if (!container) return;
+      const q = lastData?.customQuery;
+      if (!q) {
+        container.innerHTML = '';
+        return;
+      }
+      if (q.error) {
+        container.innerHTML = `<div class="banner err" style="display:block">${esc(q.error)}</div>`;
+        return;
+      }
+      if (q.affectedRows !== undefined && q.affectedRows !== null) {
+        container.innerHTML = `<div class="banner ok" style="display:block">Executed successfully (${esc(q.affectedRows)} rows affected) and pushed to phone!</div>`;
+        return;
+      }
+      container.innerHTML = q.rows && q.rows.length
+        ? `<table><thead><tr>${q.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${q.rows.map(r => `<tr>${q.columns.map(c => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+        : '<div class="empty">Query returned 0 rows.</div>';
+    }
+
+    function render(force = false) {
+      if (!force && (isPaused || isUserTyping())) return;
+      if (!lastData || !lastData.counts) return;
+      const d = lastData;
+      const panel = document.getElementById('panelContent');
+
+      if (currentTab === 'applications') {
+        if (!d.applications.length) {
+          panel.innerHTML = '<div class="empty">No applications yet. Submit one on your phone to edit or track it here!</div>';
+          return;
+        }
+        panel.innerHTML = `<table>
+          <thead><tr><th>Ref &amp; Offer</th><th>Applicant</th><th>Update Status (Push to Phone)</th><th>History Log</th></tr></thead>
+          <tbody>${d.applications.map(a => `
+            <tr>
+              <td><strong>${esc(a.reference)}</strong>${a.unanswered_over_7_days ? ` <span class="badge UNDER_REVIEW">&gt;7j</span>` : ''}<br>
+                <strong>${esc(a.offer_title_snapshot || a.offer_title_fr)}</strong><br>
+                <small>${esc(a.company_name_snapshot || a.company_name)} · ${esc(a.city_fr)}</small></td>
+              <td><strong>${esc(a.applicant_name)}</strong><br>${esc(a.applicant_email)}<br>${esc(a.applicant_phone)}<br><small>${esc(a.cover_letter)}</small></td>
+              <td>
+                <div style="margin-bottom:6px"><span class="badge ${esc(a.current_status)}">${esc(a.current_status)}</span></div>
+                <div class="inline-row">
+                  <select id="appStatus_${a.id}">
+                    ${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === a.current_status ? 'selected' : ''}>${s}</option>`).join('')}
+                  </select>
+                  <input id="appNote_${a.id}" type="text" placeholder="Note (e.g. Entretien fixé)" style="width:160px" />
+                  <button class="btn primary sm" onclick="saveAppStatus(${a.id})">Save</button>
+                </div>
+              </td>
+              <td><ul class="history-list">${a.history.map(h => `<li><strong>${esc(h.new_status)}</strong> (${esc(h.changed_at)}) — ${esc(h.note)}</li>`).join('')}</ul></td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+      } else if (currentTab === 'favorites') {
+        const addBox = `<div class="card-box">
+          <h3>Quick Add Favorite by Offer ID</h3>
+          <div class="inline-row">
+            <select id="addFavOfferId">
+              ${(d.offers || []).map(o => `<option value="${o.id}">#${o.id} — ${esc(o.title_fr)} (${esc(o.city_fr)})</option>`).join('')}
+            </select>
+            <button class="btn primary sm" onclick="toggleFavorite(document.getElementById('addFavOfferId').value)">Toggle Favorite on Phone</button>
+          </div>
+        </div>`;
+        if (!d.favorites.length) {
+          panel.innerHTML = addBox + '<div class="empty">No favorites yet. Add one above or tap ❤️ on your phone!</div>';
+          return;
+        }
+        panel.innerHTML = addBox + `<table>
+          <thead><tr><th>Offer Saved in <code>favorites</code></th><th>Company &amp; Wilaya</th><th>Stipend &amp; Dates</th><th>Personal Note (Editable)</th><th>Actions</th></tr></thead>
+          <tbody>${d.favorites.map(f => `
+            <tr>
+              <td><strong>#${esc(f.offer_id)} ${esc(f.title_fr)}</strong><br><small>${esc(f.title_ar)}</small></td>
+              <td>${esc(f.company_name)}<br><small>${esc(f.city_fr)} · ${esc(f.domain_fr)}</small></td>
+              <td><span class="badge ${f.is_paid ? 'PAID' : 'CLOSED'}">${f.monthly_stipend_dzd > 0 ? esc(f.monthly_stipend_dzd) + ' DA/m' : (f.is_paid ? 'PAID' : 'UNPAID')}</span><br><small>Début: ${esc(f.start_date || '—')} · Lim: ${esc(f.deadline || '—')}</small></td>
+              <td>
+                <div class="inline-row">
+                  <input id="favNote_${f.offer_id}" type="text" value="${esc(f.personal_note)}" placeholder="Add note..." style="width:200px" />
+                  <button class="btn secondary sm" onclick="saveFavNote(${f.offer_id})">Save Note</button>
+                </div>
+              </td>
+              <td><button class="btn danger sm" onclick="toggleFavorite(${f.offer_id})">Remove</button></td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+      } else if (currentTab === 'offers') {
+        const formHtml = `<form id="offerForm" class="card-box" onsubmit="createOfferFromForm(event)">
+          <h3 id="offerFormHeading">Add New Offer directly into Phone SQLite</h3>
+          <input type="hidden" id="offerEditId" value="" />
+          <div class="form-grid">
+            <div class="field"><label>Title (FR)</label><input id="offerTitleFr" required placeholder="Ex: Stage Kotlin Compose" /></div>
+            <div class="field"><label>Title (AR)</label><input id="offerTitleAr" placeholder="مطور أندرويد" /></div>
+            <div class="field"><label>Company</label><select id="offerCompany">${(d.companies || []).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+            <div class="field"><label>Domain</label><select id="offerDomain">${(d.domains || []).map(x => `<option value="${x.id}">${esc(x.name_fr)}</option>`).join('')}</select></div>
+            <div class="field"><label>Wilaya / State (${(d.locations || []).length} total)</label><select id="offerLocation">${(d.locations || []).slice().sort((a,b) => a.city_fr.localeCompare(b.city_fr)).map(l => `<option value="${l.id}">${esc(l.city_fr)} — ${esc(l.region_fr)}</option>`).join('')}</select></div>
+            <div class="field"><label>Duration (Months)</label><input id="offerDuration" type="number" min="1" max="24" value="3" required /></div>
+            <div class="field"><label>Stipend (DZD / month)</label><input id="offerStipend" type="number" min="0" value="30000" /></div>
+            <div class="field"><label>Start Date (YYYY-MM-DD)</label><input id="offerStartDate" value="2026-12-01" required /></div>
+            <div class="field"><label>Deadline (YYYY-MM-DD)</label><input id="offerDeadline" value="2027-01-31" required /></div>
+            <div class="field"><label>Status</label><select id="offerStatus"><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option></select></div>
+            <div class="field"><label>Description (FR)</label><input id="offerDescFr" required placeholder="Mission & compétences..." /></div>
+            <div class="field"><label>Description (AR)</label><input id="offerDescAr" placeholder="وصف العرض" /></div>
+          </div>
+          <div class="inline-row">
+            <label style="font-size:13px;font-weight:600"><input type="checkbox" id="offerPaid" checked /> Paid internship</label>
+            <button type="submit" class="btn primary">Save Offer to Phone DB</button>
+            <button type="button" class="btn outline" onclick="resetOfferForm()">Reset</button>
+          </div>
+        </form>`;
+        panel.innerHTML = formHtml + `<table>
+          <thead><tr><th>ID</th><th>Title</th><th>Company &amp; Wilaya</th><th>Domain &amp; Stipend</th><th>Status &amp; Dates</th><th>Actions</th></tr></thead>
+          <tbody>${d.offers.map(o => `
+            <tr>
+              <td>#${esc(o.id)}</td>
+              <td><strong>${esc(o.title_fr)}</strong><br><small>${esc(o.title_ar)}</small></td>
+              <td>${esc(o.company_name)} · <strong>${esc(o.city_fr)}</strong></td>
+              <td>${esc(o.domain_fr)} (${esc(o.duration_months)}m)<br><small>${o.monthly_stipend_dzd > 0 ? esc(o.monthly_stipend_dzd) + ' DA/m' : (o.is_paid ? 'Paid' : 'Unpaid')}</small></td>
+              <td><span class="badge ${esc(o.status)}">${esc(o.status)}</span><br><small>Start: ${esc(o.start_date || '—')} · Lim: ${esc(o.deadline)}</small></td>
+              <td>
+                <div class="inline-row">
+                  <button class="btn outline sm" onclick="editOffer(${o.id})">Edit</button>
+                  <button class="btn danger sm" onclick="deleteOffer(${o.id})">Delete</button>
+                </div>
+              </td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+      } else if (currentTab === 'profile') {
+        const p = d.profile;
+        if (!p) {
+          panel.innerHTML = '<div class="empty">Student profile not initialized yet.</div>';
+          return;
+        }
+        panel.innerHTML = `<form class="card-box" onsubmit="saveProfile(event)">
+          <h3>Edit Student Profile (<code>student_profiles</code>)</h3>
+          <div class="form-grid">
+            <div class="field"><label>Full Name</label><input id="profName" value="${esc(p.full_name)}" required /></div>
+            <div class="field"><label>Email</label><input id="profEmail" value="${esc(p.email)}" required /></div>
+            <div class="field"><label>Phone</label><input id="profPhone" value="${esc(p.phone)}" required /></div>
+            <div class="field"><label>University</label><input id="profUniv" value="${esc(p.university)}" required /></div>
+            <div class="field"><label>Degree Level</label><input id="profDegree" value="${esc(p.degree_level)}" required /></div>
+          </div>
+          <div class="field" style="margin-bottom:12px"><label>Bio</label><textarea id="profBio" rows="3">${esc(p.bio)}</textarea></div>
+          <button type="submit" class="btn primary">Save Profile to Phone DB</button>
+          <small style="margin-left:10px;color:var(--muted)">Last updated: ${esc(p.updated_at)}</small>
+        </form>`;
+      } else if (currentTab === 'sql') {
+        const quickBtns = (d.tables || []).map(t => `<button class="tab-btn" onclick="presetSql('SELECT * FROM ${t} LIMIT 50')">${t}</button>`).join('');
+        panel.innerHTML = `
+          <div class="sql-bar">
+            <input id="sqlInput" class="sql-input" value="${esc(activeSql)}" oninput="activeSql = this.value" />
+            <button class="btn secondary" onclick="runCustomSql()">Run SQL (SELECT / INSERT / UPDATE / DELETE)</button>
+          </div>
+          <div class="tabs">${quickBtns}</div>
+          <div id="sqlResultsOnly"></div>
+        `;
+        renderSqlResultsOnly();
+      }
+    }
+
+    async function fetchSnapshot(force = false) {
+      if (window.location.protocol === 'file:') {
+        const banner = document.getElementById('infoBanner');
+        banner.textContent = 'Opened offline as a local HTML file. Double-click Start_Live_DB_Viewer.bat (http://127.0.0.1:8765) to connect live to your phone and push edits over USB.';
+        banner.style.display = 'block';
+        return;
+      }
+      try {
+        const res = await fetch('/api/db');
+        const data = await res.json();
+        lastData = data;
+
+        const pill = document.getElementById('statusPill');
+        const dev = document.getElementById('devicePill');
+        const sync = document.getElementById('syncPill');
+        const err = document.getElementById('infoBanner');
+
+        dev.textContent = 'Device: ' + (data.device || '—');
+        sync.textContent = 'Last sync: ' + (data.lastSyncAt || '—');
+
+        if (data.ok) {
+          pill.textContent = isPaused ? 'PAUSED' : 'LIVE SYNCING';
+          pill.className = 'pill ' + (isPaused ? 'warn' : 'live');
+          err.style.display = 'none';
+        } else {
+          pill.textContent = data.stale ? 'STALE (Retrying)' : 'WAITING';
+          pill.className = 'pill warn';
+          err.textContent = data.error || 'Waiting for phone connection...';
+          err.style.display = 'block';
+        }
+
+        if (data.counts) {
+          document.getElementById('kpiOffers').textContent = data.counts.offers;
+          document.getElementById('kpiFavorites').textContent = data.counts.favorites;
+          document.getElementById('kpiApps').textContent = data.counts.applications;
+          document.getElementById('kpiLocations').textContent = data.counts.locations || '—';
+          document.getElementById('kpiHistory').textContent = data.counts.history;
+        }
+        render(force);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    fetchSnapshot(true);
+    setInterval(() => fetchSnapshot(false), 1500);
+  </script>
+</body>
+</html>

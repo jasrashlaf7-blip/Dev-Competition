@@ -166,6 +166,9 @@ interface OfferDao {
     @Query("SELECT COUNT(*) FROM offers")
     suspend fun getOfferCount(): Int
 
+    @Query("SELECT COUNT(*) FROM locations")
+    suspend fun getLocationCount(): Int
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDomains(domains: List<DomainEntity>)
 

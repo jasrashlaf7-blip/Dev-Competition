@@ -34,10 +34,11 @@
 | TC-24 | Sécurité Logcat | Exécuter requêtes SQL en mode Debug | Tag `FIRSTSTEP_SQL` logue uniquement la requête et `args=N`, zéro PII | OK |
 | TC-25 | I18n & Thème | Basculer FR ↔ AR et Clair ↔ Sombre | Bascule immédiate en RTL pour l'arabe et conservation après redémarrage | OK |
 | TC-26 | Moniteur PC USB | Lancer `tools/live_db_dashboard.py` avec app en cours | Affiche en direct `favorites` (dont `personal_note`), `applications`, `offers` et alertes `>7j` | OK |
+| TC-27 | Données Algérie | Ouvrir le filtre *Wilaya / Ville* dans Offres & Éditeur d'offre | Les **58 wilayas d'Algérie (01 Adrar → 58 El Meniaa)** sont disponibles en FR/AR | OK |
 
 ---
 
-## 2. Vérification Multi-Largeurs, Rotation & Accessibilité
+## 2. Vérification Multi-Largeurs, Rotation, Accessibilité & Lint
 
 - **Compact 360 dp (ex: Petit smartphone) :**
   - Puces de filtres dans `Row.horizontalScroll` sans débordement horizontal.
@@ -49,6 +50,12 @@
   - `OffersScreen` passe automatiquement en grille 2 colonnes (`LazyVerticalGrid(GridCells.Fixed(2))`) dès `maxWidth >= 600.dp`.
   - `FirstStepNavScaffold` remplace la `NavigationBar` par un `NavigationRail` latéral dès `maxWidth >= 840.dp`.
   - Largeur maximale des formulaires/listes contrainte (`widthIn(max = 600.dp / 680.dp)`).
-- **Accessibilité & Internationalisation :**
+- **Accessibilité, Police 200 % & Internationalisation :**
+  - `heightIn(min = ...)` sur puces, badges et boutons principaux afin d'éviter toute troncature jusqu'à **200 % d'agrandissement de police**.
   - `contentDescription` renseigné sur tous les `IconButton` et images ; `testTag` `snake_case` sur les contrôles interactifs.
   - Support complet RTL (`LayoutDirection.Rtl`) pour l'arabe.
+- **Analyse Android Lint (`gradle :app:lintDebug`) :**
+  - **0 erreur bloquante** détectée (vérification sécurité manifeste, RTL, accessibilité et Room SQLite validée).
+- **Tests automatisés (`gradle :app:testDebugUnitTest`) :**
+  - **21 tests unitaires & Robolectric passants** couvrant Seed 58 wilayas, migration Room v1→v2, règles métier, DAO Room, `FakeFirstStepRepository` + ViewModels, CSV OWASP, PIN SHA-256 salé et alertes `> 7 jours`.
+

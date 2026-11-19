@@ -29,12 +29,13 @@ class SeedDataLoader(
 
             val needsOffers = offerDao.getOfferCount() == 0
             val needsProfile = profileDao.getProfileOnce() == null
+            val needsLocations = offerDao.getLocationCount() < 58
 
-            if (!needsOffers && !needsProfile) {
+            if (!needsOffers && !needsProfile && !needsLocations) {
                 return@withContext
             }
 
-            val jsonText = if (needsOffers) {
+            val jsonText = if (needsOffers || needsLocations) {
                 context.assets.open("firststep_seed.json").bufferedReader().use { it.readText() }
             } else {
                 ""
@@ -45,21 +46,8 @@ class SeedDataLoader(
                     profileDao.upsertProfile(defaultStudentProfile())
                 }
 
-                if (needsOffers && offerDao.getOfferCount() == 0) {
+                if ((needsOffers || needsLocations) && jsonText.isNotEmpty()) {
                     val root = JSONObject(jsonText)
-
-                    val domains = mutableListOf<DomainEntity>()
-                    val domainsJson = root.getJSONArray("domains")
-                    for (i in 0 until domainsJson.length()) {
-                        val obj = domainsJson.getJSONObject(i)
-                        domains.add(
-                            DomainEntity(
-                                id = obj.getLong("id"),
-                                nameFr = obj.getString("name_fr"),
-                                nameAr = obj.getString("name_ar")
-                            )
-                        )
-                    }
 
                     val locations = mutableListOf<LocationEntity>()
                     val locationsJson = root.getJSONArray("locations")
@@ -76,82 +64,99 @@ class SeedDataLoader(
                         )
                     }
 
-                    val companies = mutableListOf<CompanyEntity>()
-                    val companiesJson = root.getJSONArray("companies")
-                    for (i in 0 until companiesJson.length()) {
-                        val obj = companiesJson.getJSONObject(i)
-                        companies.add(
-                            CompanyEntity(
-                                id = obj.getLong("id"),
-                                name = obj.getString("name"),
-                                sectorFr = obj.optString("sector_fr", ""),
-                                sectorAr = obj.optString("sector_ar", ""),
-                                descriptionFr = obj.optString("description_fr", ""),
-                                descriptionAr = obj.optString("description_ar", ""),
-                                website = obj.optString("website", ""),
-                                logoUrl = obj.optString("logo_url", "")
-                            )
-                        )
-                    }
-
-                    val skills = mutableListOf<SkillEntity>()
-                    val skillsJson = root.getJSONArray("skills")
-                    for (i in 0 until skillsJson.length()) {
-                        val obj = skillsJson.getJSONObject(i)
-                        skills.add(
-                            SkillEntity(
-                                id = obj.getLong("id"),
-                                nameFr = obj.getString("name_fr"),
-                                nameAr = obj.getString("name_ar")
-                            )
-                        )
-                    }
-
-                    val offers = mutableListOf<OfferEntity>()
-                    val offerSkills = mutableListOf<OfferSkillCrossRef>()
-                    val offersJson = root.getJSONArray("offers")
-                    for (i in 0 until offersJson.length()) {
-                        val obj = offersJson.getJSONObject(i)
-                        val offerId = obj.getLong("id")
-                        val isPaid = obj.getBoolean("is_paid")
-                        val defaultStipend = if (isPaid) 20000 + ((offerId.toInt() % 5) * 5000) else 0
-                        val defaultStartDate = "2026-12-%02d".format(1 + (offerId.toInt() % 15))
-                        offers.add(
-                            OfferEntity(
-                                id = offerId,
-                                companyId = obj.getLong("company_id"),
-                                domainId = obj.getLong("domain_id"),
-                                locationId = obj.getLong("location_id"),
-                                titleFr = obj.getString("title_fr"),
-                                titleAr = obj.getString("title_ar"),
-                                descriptionFr = obj.getString("description_fr"),
-                                descriptionAr = obj.getString("description_ar"),
-                                durationMonths = obj.getInt("duration_months"),
-                                isPaid = isPaid,
-                                monthlyStipendDzd = obj.optInt("monthly_stipend_dzd", defaultStipend),
-                                startDate = obj.optString("start_date", defaultStartDate),
-                                status = OfferStatus.valueOf(obj.getString("status")),
-                                deadline = obj.getString("deadline"),
-                                createdAt = obj.getString("created_at")
-                            )
-                        )
-                        val skillIdsJson = obj.getJSONArray("skill_ids")
-                        for (j in 0 until skillIdsJson.length()) {
-                            offerSkills.add(
-                                OfferSkillCrossRef(
-                                    offerId = offerId,
-                                    skillId = skillIdsJson.getLong(j)
+                    if (!needsOffers) {
+                        offerDao.insertLocations(locations)
+                    } else if (offerDao.getOfferCount() == 0) {
+                        val domains = mutableListOf<DomainEntity>()
+                        val domainsJson = root.getJSONArray("domains")
+                        for (i in 0 until domainsJson.length()) {
+                            val obj = domainsJson.getJSONObject(i)
+                            domains.add(
+                                DomainEntity(
+                                    id = obj.getLong("id"),
+                                    nameFr = obj.getString("name_fr"),
+                                    nameAr = obj.getString("name_ar")
                                 )
                             )
                         }
-                    }
 
-                    offerDao.insertDomains(domains)
-                    offerDao.insertLocations(locations)
-                    offerDao.insertCompanies(companies)
-                    offerDao.insertSkills(skills)
-                    offerDao.insertOffers(offers)
-                    offerDao.insertOfferSkills(offerSkills)
+                        val companies = mutableListOf<CompanyEntity>()
+                        val companiesJson = root.getJSONArray("companies")
+                        for (i in 0 until companiesJson.length()) {
+                            val obj = companiesJson.getJSONObject(i)
+                            companies.add(
+                                CompanyEntity(
+                                    id = obj.getLong("id"),
+                                    name = obj.getString("name"),
+                                    sectorFr = obj.optString("sector_fr", ""),
+                                    sectorAr = obj.optString("sector_ar", ""),
+                                    descriptionFr = obj.optString("description_fr", ""),
+                                    descriptionAr = obj.optString("description_ar", ""),
+                                    website = obj.optString("website", ""),
+                                    logoUrl = obj.optString("logo_url", "")
+                                )
+                            )
+                        }
+
+                        val skills = mutableListOf<SkillEntity>()
+                        val skillsJson = root.getJSONArray("skills")
+                        for (i in 0 until skillsJson.length()) {
+                            val obj = skillsJson.getJSONObject(i)
+                            skills.add(
+                                SkillEntity(
+                                    id = obj.getLong("id"),
+                                    nameFr = obj.getString("name_fr"),
+                                    nameAr = obj.getString("name_ar")
+                                )
+                            )
+                        }
+
+                        val offers = mutableListOf<OfferEntity>()
+                        val offerSkills = mutableListOf<OfferSkillCrossRef>()
+                        val offersJson = root.getJSONArray("offers")
+                        for (i in 0 until offersJson.length()) {
+                            val obj = offersJson.getJSONObject(i)
+                            val offerId = obj.getLong("id")
+                            val isPaid = obj.getBoolean("is_paid")
+                            val defaultStipend = if (isPaid) 20000 + ((offerId.toInt() % 5) * 5000) else 0
+                            val defaultStartDate = "2026-12-%02d".format(1 + (offerId.toInt() % 15))
+                            offers.add(
+                                OfferEntity(
+                                    id = offerId,
+                                    companyId = obj.getLong("company_id"),
+                                    domainId = obj.getLong("domain_id"),
+                                    locationId = obj.getLong("location_id"),
+                                    titleFr = obj.getString("title_fr"),
+                                    titleAr = obj.getString("title_ar"),
+                                    descriptionFr = obj.getString("description_fr"),
+                                    descriptionAr = obj.getString("description_ar"),
+                                    durationMonths = obj.getInt("duration_months"),
+                                    isPaid = isPaid,
+                                    monthlyStipendDzd = obj.optInt("monthly_stipend_dzd", defaultStipend),
+                                    startDate = obj.optString("start_date", defaultStartDate),
+                                    status = OfferStatus.valueOf(obj.getString("status")),
+                                    deadline = obj.getString("deadline"),
+                                    createdAt = obj.getString("created_at")
+                                )
+                            )
+                            val skillIdsJson = obj.getJSONArray("skill_ids")
+                            for (j in 0 until skillIdsJson.length()) {
+                                offerSkills.add(
+                                    OfferSkillCrossRef(
+                                        offerId = offerId,
+                                        skillId = skillIdsJson.getLong(j)
+                                    )
+                                )
+                            }
+                        }
+
+                        offerDao.insertDomains(domains)
+                        offerDao.insertLocations(locations)
+                        offerDao.insertCompanies(companies)
+                        offerDao.insertSkills(skills)
+                        offerDao.insertOffers(offers)
+                        offerDao.insertOfferSkills(offerSkills)
+                    }
                 }
             }
         }

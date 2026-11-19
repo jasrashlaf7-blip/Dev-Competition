@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-FirstStep Live SQLite PC Dashboard (Offline USB ADB Monitor)
-------------------------------------------------------------
-Streams the live SQLite database (firststep_offline.db) from a connected
-Android debug device over USB (no INTERNET permission needed in the app)
-and serves a real-time auto-updating dashboard at http://127.0.0.1:8765.
+FirstStep Live SQLite PC Dashboard & Two-Way Editor (Offline USB ADB)
+---------------------------------------------------------------------
+Serves tools/Live_DB_Editor.html at http://127.0.0.1:8765, pulls
+firststep_offline.db live over USB ADB, and lets you enter/edit/delete
+records directly from the browser and push changes back to the phone.
 """
 
 from __future__ import annotations
@@ -26,10 +26,12 @@ import webbrowser
 from pathlib import Path
 
 PACKAGE_ID = "com.aistudio.firststep.oran26"
+MAIN_ACTIVITY = "com.olympiades.firststep.MainActivity"
 DB_REMOTE_PATH = "databases/firststep_offline.db"
 HOST = "127.0.0.1"
 PORT = 8765
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+HTML_FILE = Path(__file__).resolve().parent / "Live_DB_Editor.html"
 
 
 def find_adb_path() -> str | None:
@@ -84,7 +86,7 @@ class LiveDbBridge:
         if not self.adb_path or not Path(self.adb_path).exists():
             self.adb_path = find_adb_path()
         if not self.adb_path:
-            return False, "adb.exe not found. Make sure Android SDK Platform-Tools is installed or set local.properties."
+            return False, "adb.exe not found. Make sure Android SDK Platform-Tools is installed."
 
         try:
             dev_res = subprocess.run(
@@ -134,7 +136,80 @@ class LiveDbBridge:
         except Exception as exc:
             return False, str(exc)
 
-    def read_snapshot(self, custom_sql: str | None = None) -> dict:
+    def _push_db_to_phone(self) -> tuple[bool, str | None]:
+        if not self.adb_path or not self._db_file.exists():
+            return False, "ADB or local database snapshot unavailable."
+        try:
+            db_bytes = self._db_file.read_bytes()
+            subprocess.run(
+                [self.adb_path, "shell", "am", "force-stop", PACKAGE_ID],
+                capture_output=True,
+                timeout=5,
+            )
+            push_res = subprocess.run(
+                [
+                    self.adb_path,
+                    "shell",
+                    "run-as",
+                    PACKAGE_ID,
+                    "sh",
+                    "-c",
+                    f"rm -f {DB_REMOTE_PATH}-wal {DB_REMOTE_PATH}-shm {DB_REMOTE_PATH}-journal && cat > {DB_REMOTE_PATH}",
+                ],
+                input=db_bytes,
+                capture_output=True,
+                timeout=10,
+            )
+            if push_res.returncode != 0:
+                return False, push_res.stderr.decode("utf-8", errors="ignore").strip() or "Failed pushing DB."
+            subprocess.run(
+                [self.adb_path, "shell", "am", "start", "-n", f"{PACKAGE_ID}/{MAIN_ACTIVITY}"],
+                capture_output=True,
+                timeout=5,
+            )
+            self.last_sync_at = time.strftime("%H:%M:%S")
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+
+    def restart_phone_app(self) -> tuple[bool, str | None]:
+        if not self.adb_path:
+            return False, "ADB not found."
+        try:
+            subprocess.run([self.adb_path, "shell", "am", "force-stop", PACKAGE_ID], capture_output=True, timeout=5)
+            subprocess.run(
+                [self.adb_path, "shell", "am", "start", "-n", f"{PACKAGE_ID}/{MAIN_ACTIVITY}"],
+                capture_output=True,
+                timeout=5,
+            )
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+
+    def mutate(self, fn) -> dict:
+        ok, err = self.pull_latest_db()
+        if not ok and not self._db_file.exists():
+            return {"ok": False, "error": err or "Phone DB not pulled yet."}
+
+        with self._lock:
+            conn = sqlite3.connect(self._db_file)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            try:
+                result = fn(conn)
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                return {"ok": False, "error": str(exc)}
+            finally:
+                conn.close()
+
+            pushed, push_err = self._push_db_to_phone()
+            if not pushed:
+                return {"ok": False, "error": f"Updated locally, but failed pushing to phone: {push_err}"}
+            return {"ok": True, **(result if isinstance(result, dict) else {"message": str(result)})}
+
+    def read_snapshot(self) -> dict:
         ok, err = self.pull_latest_db()
         if not ok:
             self.last_error = err
@@ -153,23 +228,21 @@ class LiveDbBridge:
             conn.row_factory = sqlite3.Row
             try:
                 cur = conn.cursor()
-
                 tables = [
                     r["name"]
                     for r in cur.execute(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%' AND name != 'room_master_table' ORDER BY name"
                     ).fetchall()
                 ]
-
                 profile_row = cur.execute("SELECT * FROM student_profiles WHERE id = 1 LIMIT 1").fetchone()
                 profile = dict(profile_row) if profile_row else None
 
-                fav_cols = {
-                    r["name"] for r in cur.execute("PRAGMA table_info(favorites)").fetchall()
-                }
-                offer_cols = {
-                    r["name"] for r in cur.execute("PRAGMA table_info(offers)").fetchall()
-                }
+                companies = [dict(r) for r in cur.execute("SELECT id, name FROM companies ORDER BY name ASC").fetchall()]
+                domains = [dict(r) for r in cur.execute("SELECT id, name_fr, name_ar FROM domains ORDER BY id ASC").fetchall()]
+                locations = [dict(r) for r in cur.execute("SELECT id, city_fr, city_ar, region_fr, region_ar FROM locations ORDER BY id ASC").fetchall()]
+
+                fav_cols = {r["name"] for r in cur.execute("PRAGMA table_info(favorites)").fetchall()}
+                offer_cols = {r["name"] for r in cur.execute("PRAGMA table_info(offers)").fetchall()}
                 has_v2_fav = "offer_title_fr" in fav_cols
                 has_v2_offer = "monthly_stipend_dzd" in offer_cols
 
@@ -200,9 +273,7 @@ class LiveDbBridge:
                             SELECT f.id AS favorite_id, f.offer_id, f.added_at,
                                    o.title_fr, o.title_ar, o.duration_months, o.is_paid, o.status, o.deadline,
                                    0 AS monthly_stipend_dzd, '' AS start_date, '' AS personal_note,
-                                   c.name AS company_name,
-                                   d.name_fr AS domain_fr, d.name_ar AS domain_ar,
-                                   l.city_fr, l.city_ar,
+                                   c.name AS company_name, d.name_fr AS domain_fr, l.city_fr,
                                    a.reference AS application_reference, a.current_status AS application_status
                             FROM favorites f
                             INNER JOIN offers o ON o.id = f.offer_id
@@ -217,9 +288,7 @@ class LiveDbBridge:
 
                 history_rows = [
                     dict(r)
-                    for r in cur.execute(
-                        "SELECT * FROM status_history ORDER BY changed_at ASC, id ASC"
-                    ).fetchall()
+                    for r in cur.execute("SELECT * FROM status_history ORDER BY changed_at ASC, id ASC").fetchall()
                 ]
                 history_by_app: dict[int, list[dict]] = {}
                 for h in history_rows:
@@ -231,25 +300,20 @@ class LiveDbBridge:
                     """
                     SELECT a.*,
                            COALESCE(o.title_fr, '') AS offer_title_fr,
-                           COALESCE(o.title_ar, '') AS offer_title_ar,
                            COALESCE(c.name, '') AS company_name,
                            COALESCE(l.city_fr, '') AS city_fr,
-                           COALESCE(d.name_fr, '') AS domain_fr,
                            CAST(julianday(?) - julianday(substr(a.applied_at, 1, 10)) AS INTEGER) AS days_since_applied
                     FROM applications a
                     LEFT JOIN offers o ON o.id = a.offer_id
                     LEFT JOIN companies c ON c.id = o.company_id
                     LEFT JOIN locations l ON l.id = o.location_id
-                    LEFT JOIN domains d ON d.id = o.domain_id
                     ORDER BY a.applied_at DESC, a.id DESC
                     """,
                     (today_str,),
                 ).fetchall():
                     item = dict(r)
                     days = item.get("days_since_applied") or 0
-                    item["unanswered_over_7_days"] = (
-                        item.get("current_status") == "SUBMITTED" and days > 7
-                    )
+                    item["unanswered_over_7_days"] = item.get("current_status") == "SUBMITTED" and days > 7
                     item["history"] = history_by_app.get(int(item["id"]), [])
                     applications.append(item)
 
@@ -275,21 +339,6 @@ class LiveDbBridge:
                         o.setdefault("monthly_stipend_dzd", 0)
                         o.setdefault("start_date", "")
 
-                custom_result = None
-                if custom_sql and custom_sql.strip():
-                    cleaned = custom_sql.strip().rstrip(";")
-                    if re.match(r"^(SELECT|PRAGMA|EXPLAIN)\b", cleaned, flags=re.IGNORECASE):
-                        qcur = cur.execute(cleaned)
-                        cols = [d[0] for d in qcur.description] if qcur.description else []
-                        rows = [dict(row) for row in qcur.fetchall()[:200]]
-                        custom_result = {"columns": cols, "rows": rows, "error": None}
-                    else:
-                        custom_result = {
-                            "columns": [],
-                            "rows": [],
-                            "error": "Read-only monitor: only SELECT / PRAGMA queries are allowed here.",
-                        }
-
                 return {
                     "ok": ok,
                     "stale": not ok,
@@ -302,13 +351,16 @@ class LiveDbBridge:
                         "offers": len(offers),
                         "favorites": len(favorites),
                         "applications": len(applications),
+                        "locations": len(locations),
                         "history": len(history_rows),
                     },
+                    "companies": companies,
+                    "domains": domains,
+                    "locations": locations,
                     "profile": profile,
                     "favorites": favorites,
                     "applications": applications,
                     "offers": offers,
-                    "customQuery": custom_result,
                 }
             except Exception as exc:
                 return {
@@ -329,375 +381,36 @@ class LiveDbBridge:
 
 BRIDGE = LiveDbBridge()
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FirstStep — Live SQLite Monitor (Phone USB)</title>
-  <style>
-    :root {
-      --primary: #1565C0;
-      --secondary: #00897B;
-      --bg: #F8FAFC;
-      --surface: #FFFFFF;
-      --text: #0F172A;
-      --muted: #64748B;
-      --border: #E2E8F0;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    header {
-      background: linear-gradient(135deg, #132248, #1565C0);
-      color: #fff;
-      padding: 18px 24px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
-    }
-    header h1 { margin: 0; font-size: 20px; }
-    header p { margin: 4px 0 0; font-size: 13px; opacity: 0.85; }
-    .status-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .pill {
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: rgba(255,255,255,0.16);
-    }
-    .pill.live { background: #16A34A; }
-    .pill.warn { background: #D97706; }
-    .btn {
-      border: none;
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      background: #fff;
-      color: #132248;
-      text-decoration: none;
-    }
-    .btn.secondary { background: var(--secondary); color: #fff; }
-    main { max-width: 1280px; margin: 20px auto; padding: 0 18px 40px; }
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-    .kpi {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 16px;
-    }
-    .kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-    .kpi-val { font-size: 26px; font-weight: 800; color: var(--primary); margin-top: 4px; }
-    .error-banner {
-      background: #FEF3C7;
-      border: 1px solid #F59E0B;
-      color: #92400E;
-      padding: 10px 14px;
-      border-radius: 10px;
-      margin-bottom: 14px;
-      font-size: 13px;
-      display: none;
-    }
-    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .tab-btn {
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      padding: 8px 14px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      overflow-x: auto;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    th { font-size: 11px; text-transform: uppercase; color: var(--muted); background: #F1F5F9; }
-    .badge {
-      display: inline-block;
-      padding: 3px 9px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #fff;
-      background: var(--primary);
-    }
-    .badge.SUBMITTED { background: #1976D2; }
-    .badge.UNDER_REVIEW { background: #F57C00; }
-    .badge.INTERVIEW_SCHEDULED { background: #7B1FA2; }
-    .badge.ACCEPTED { background: #2E7D32; }
-    .badge.REJECTED { background: #C62828; }
-    .badge.CANCELLED, .badge.CLOSED { background: #616161; }
-    .badge.OPEN, .badge.PAID { background: #00897B; }
-    .history-list { margin: 6px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
-    .sql-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-    .sql-input {
-      flex: 1;
-      min-width: 260px;
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-family: Consolas, monospace;
-      font-size: 13px;
-    }
-    .empty { padding: 28px; text-align: center; color: var(--muted); font-size: 14px; }
-  </style>
-</head>
-<body>
-  <header>
-    <div>
-      <h1>FirstStep — Live SQLite Monitor (USB)</h1>
-      <p>Reads <code>firststep_offline.db</code> live from your phone over USB (100% offline-first)</p>
-    </div>
-    <div class="status-bar">
-      <span id="statusPill" class="pill warn">Connecting...</span>
-      <span id="devicePill" class="pill">Device: —</span>
-      <span id="syncPill" class="pill">Last sync: —</span>
-      <a class="btn" href="/api/download">Download .db</a>
-    </div>
-  </header>
-
-  <main>
-    <div id="errorBanner" class="error-banner"></div>
-
-    <div class="kpis">
-      <div class="kpi"><div class="kpi-label">Offers</div><div class="kpi-val" id="kpiOffers">—</div></div>
-      <div class="kpi"><div class="kpi-label">Favorites</div><div class="kpi-val" id="kpiFavorites">—</div></div>
-      <div class="kpi"><div class="kpi-label">Applications</div><div class="kpi-val" id="kpiApps">—</div></div>
-      <div class="kpi"><div class="kpi-label">Status History Logs</div><div class="kpi-val" id="kpiHistory">—</div></div>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('applications', this)">Applications &amp; History</button>
-      <button class="tab-btn" onclick="switchTab('favorites', this)">Favorites (Full Details)</button>
-      <button class="tab-btn" onclick="switchTab('profile', this)">Student Profile</button>
-      <button class="tab-btn" onclick="switchTab('offers', this)">All Offers</button>
-      <button class="tab-btn" onclick="switchTab('sql', this)">SQL Query Console</button>
-    </div>
-
-    <div class="panel" id="panelContent">
-      <div class="empty">Connecting to phone database...</div>
-    </div>
-  </main>
-
-  <script>
-    let currentTab = 'applications';
-    let lastData = null;
-    let activeSql = 'SELECT id, offer_id, offer_title_fr, company_name, city_fr, monthly_stipend_dzd, start_date, deadline, personal_note, added_at FROM favorites ORDER BY id DESC';
-
-    function esc(v) {
-      if (v === null || v === undefined) return '';
-      return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-
-    function switchTab(tab, btn) {
-      currentTab = tab;
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      render();
-    }
-
-    function runCustomSql() {
-      const inp = document.getElementById('sqlInput');
-      if (inp) activeSql = inp.value;
-      fetchSnapshot();
-    }
-
-    function presetSql(sql) {
-      activeSql = sql;
-      const inp = document.getElementById('sqlInput');
-      if (inp) inp.value = sql;
-      fetchSnapshot();
-    }
-
-    function render() {
-      if (!lastData || !lastData.counts) return;
-      const d = lastData;
-      const panel = document.getElementById('panelContent');
-
-      if (currentTab === 'applications') {
-        if (!d.applications.length) {
-          panel.innerHTML = '<div class="empty">No applications yet. Submit one on your phone to see it appear live!</div>';
-          return;
-        }
-        panel.innerHTML = `<table>
-          <thead><tr><th>Ref</th><th>Offer &amp; Snapshot</th><th>Applicant Details</th><th>Cover Letter &amp; CV</th><th>Status</th><th>Status History</th></tr></thead>
-          <tbody>${d.applications.map(a => `
-            <tr>
-              <td><strong>${esc(a.reference)}</strong><br><small>${esc(a.applied_at)}</small>${a.unanswered_over_7_days ? `<br><span class="badge UNDER_REVIEW">&gt;7j (${esc(a.days_since_applied)}j)</span>` : ''}</td>
-              <td><strong>${esc(a.offer_title_snapshot || a.offer_title_fr)}</strong><br><small>${esc(a.company_name_snapshot || a.company_name)} · ${esc(a.city_fr)}${a.monthly_stipend_dzd > 0 ? ' · ' + esc(a.monthly_stipend_dzd) + ' DA' : ''}</small></td>
-              <td><strong>${esc(a.applicant_name)}</strong><br>${esc(a.applicant_email)}<br>${esc(a.applicant_phone)}</td>
-              <td>${esc(a.cover_letter)}<br><small>CV: ${esc(a.cv_uri || '—')}</small></td>
-              <td><span class="badge ${esc(a.current_status)}">${esc(a.current_status)}</span></td>
-              <td><ul class="history-list">${a.history.map(h => `<li><strong>${esc(h.new_status)}</strong> (${esc(h.changed_at)}) — ${esc(h.note)}</li>`).join('')}</ul></td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-      } else if (currentTab === 'favorites') {
-        if (!d.favorites.length) {
-          panel.innerHTML = '<div class="empty">No favorites yet. Tap a heart icon on your phone!</div>';
-          return;
-        }
-        panel.innerHTML = `<table>
-          <thead><tr><th>Fav ID</th><th>Saved Offer Metadata (in <code>favorites</code>)</th><th>Company &amp; City</th><th>Stipend &amp; Dates</th><th>Personal Note</th><th>Status &amp; Added At</th></tr></thead>
-          <tbody>${d.favorites.map(f => `
-            <tr>
-              <td>#${esc(f.favorite_id)}<br><small>offer_id=${esc(f.offer_id)}</small></td>
-              <td><strong>${esc(f.title_fr)}</strong><br><small>${esc(f.title_ar)}</small></td>
-              <td>${esc(f.company_name)}<br><small>${esc(f.city_fr)} · ${esc(f.domain_fr)}</small></td>
-              <td><span class="badge ${f.is_paid ? 'PAID' : 'CLOSED'}">${f.monthly_stipend_dzd > 0 ? esc(f.monthly_stipend_dzd) + ' DA/m' : (f.is_paid ? 'PAID' : 'UNPAID')}</span><br><small>Début: ${esc(f.start_date || '—')} · Lim: ${esc(f.deadline || '—')}</small></td>
-              <td>${f.personal_note ? `<strong>${esc(f.personal_note)}</strong>` : '<small>—</small>'}</td>
-              <td>${f.application_status ? `<span class="badge ${esc(f.application_status)}">${esc(f.application_reference)} (${esc(f.application_status)})</span>` : '<small>Not applied</small>'}<br><small>${esc(f.added_at)}</small></td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-      } else if (currentTab === 'profile') {
-        const p = d.profile;
-        if (!p) {
-          panel.innerHTML = '<div class="empty">Student profile not initialized yet.</div>';
-          return;
-        }
-        panel.innerHTML = `<table>
-          <thead><tr><th>Field</th><th>Saved Value in <code>student_profiles</code></th></tr></thead>
-          <tbody>
-            <tr><td>Full Name</td><td><strong>${esc(p.full_name)}</strong></td></tr>
-            <tr><td>Email</td><td>${esc(p.email)}</td></tr>
-            <tr><td>Phone</td><td>${esc(p.phone)}</td></tr>
-            <tr><td>University</td><td>${esc(p.university)}</td></tr>
-            <tr><td>Degree Level</td><td>${esc(p.degree_level)}</td></tr>
-            <tr><td>Bio</td><td>${esc(p.bio)}</td></tr>
-            <tr><td>CV URI</td><td>${esc(p.cv_uri || '—')}</td></tr>
-            <tr><td>Updated At</td><td>${esc(p.updated_at)}</td></tr>
-          </tbody>
-        </table>`;
-      } else if (currentTab === 'offers') {
-        panel.innerHTML = `<table>
-          <thead><tr><th>ID</th><th>Title (FR / AR)</th><th>Company &amp; City</th><th>Domain &amp; Stipend</th><th>Status &amp; Dates</th><th>Fav / App</th></tr></thead>
-          <tbody>${d.offers.map(o => `
-            <tr>
-              <td>${esc(o.id)}</td>
-              <td><strong>${esc(o.title_fr)}</strong><br><small>${esc(o.title_ar)}</small></td>
-              <td>${esc(o.company_name)} · ${esc(o.city_fr)}</td>
-              <td>${esc(o.domain_fr)} (${esc(o.duration_months)}m)<br><small>${o.monthly_stipend_dzd > 0 ? esc(o.monthly_stipend_dzd) + ' DA/mois' : (o.is_paid ? 'Payé' : 'Non rémunéré')}</small></td>
-              <td><span class="badge ${esc(o.status)}">${esc(o.status)}</span><br><small>Début: ${esc(o.start_date || '—')} · Lim: ${esc(o.deadline)}</small></td>
-              <td>${o.is_favorite ? '❤️ Fav ' : ''}${o.application_reference ? `<span class="badge ${esc(o.application_status)}">${esc(o.application_reference)}</span>` : ''}</td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-      } else if (currentTab === 'sql') {
-        const q = d.customQuery;
-        const quickBtns = (d.tables || []).map(t => `<button class="tab-btn" onclick="presetSql('SELECT * FROM ${t} LIMIT 50')">${t}</button>`).join('');
-        let tableHtml = '';
-        if (q && q.error) {
-          tableHtml = `<div class="empty">${esc(q.error)}</div>`;
-        } else if (q && q.columns) {
-          tableHtml = q.rows.length
-            ? `<table><thead><tr>${q.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${q.rows.map(r => `<tr>${q.columns.map(c => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`
-            : '<div class="empty">Query returned 0 rows.</div>';
-        }
-        const existingResults = document.getElementById('sqlResultsOnly');
-        if (existingResults) {
-          existingResults.innerHTML = tableHtml;
-        } else {
-          panel.innerHTML = `
-            <div class="sql-bar">
-              <input id="sqlInput" class="sql-input" value="${esc(activeSql)}" oninput="activeSql = this.value" />
-              <button class="btn secondary" onclick="runCustomSql()">Run SELECT</button>
-            </div>
-            <div class="tabs">${quickBtns}</div>
-            <div id="sqlResultsOnly">${tableHtml}</div>
-          `;
-        }
-      }
-    }
-
-    async function fetchSnapshot() {
-      try {
-        const url = currentTab === 'sql' ? `/api/db?sql=${encodeURIComponent(activeSql)}` : '/api/db';
-        const res = await fetch(url);
-        const data = await res.json();
-        lastData = data;
-
-        const pill = document.getElementById('statusPill');
-        const dev = document.getElementById('devicePill');
-        const sync = document.getElementById('syncPill');
-        const err = document.getElementById('errorBanner');
-
-        dev.textContent = 'Device: ' + (data.device || '—');
-        sync.textContent = 'Last sync: ' + (data.lastSyncAt || '—');
-
-        if (data.ok) {
-          pill.textContent = 'LIVE SYNCING';
-          pill.className = 'pill live';
-          err.style.display = 'none';
-        } else {
-          pill.textContent = data.stale ? 'STALE (Retrying)' : 'WAITING';
-          pill.className = 'pill warn';
-          err.textContent = data.error || 'Waiting for phone connection...';
-          err.style.display = 'block';
-        }
-
-        if (data.counts) {
-          document.getElementById('kpiOffers').textContent = data.counts.offers;
-          document.getElementById('kpiFavorites').textContent = data.counts.favorites;
-          document.getElementById('kpiApps').textContent = data.counts.applications;
-          document.getElementById('kpiHistory').textContent = data.counts.history;
-        }
-        render();
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    fetchSnapshot();
-    setInterval(fetchSnapshot, 1200);
-  </script>
-</body>
-</html>
-"""
-
 
 class DashboardHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         return
 
+    def _send_json(self, payload: dict, status: int = 200) -> None:
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _read_json_body(self) -> dict:
+        length = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(length) if length > 0 else b"{}"
+        return json.loads(raw.decode("utf-8"))
+
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/":
-            body = HTML_PAGE.encode("utf-8")
+            body = HTML_FILE.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
         elif parsed.path == "/api/db":
-            params = urllib.parse.parse_qs(parsed.query)
-            sql = params.get("sql", [None])[0]
-            payload = json.dumps(BRIDGE.read_snapshot(sql), ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(BRIDGE.read_snapshot())
         elif parsed.path == "/api/download":
             BRIDGE.pull_latest_db()
             db_bytes = BRIDGE.get_db_bytes()
@@ -713,6 +426,191 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_POST(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        try:
+            body = self._read_json_body()
+        except Exception as exc:
+            self._send_json({"ok": False, "error": f"Invalid JSON: {exc}"}, status=400)
+            return
+
+        if parsed.path == "/api/app/restart":
+            ok, err = BRIDGE.restart_phone_app()
+            self._send_json({"ok": ok, "message": "Phone app restarted!" if ok else None, "error": err})
+
+        elif parsed.path == "/api/profile/update":
+            def tx(conn: sqlite3.Connection) -> dict:
+                now = time.strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute(
+                    """
+                    UPDATE student_profiles
+                    SET full_name = ?, email = ?, phone = ?, university = ?, degree_level = ?, bio = ?, updated_at = ?
+                    WHERE id = 1
+                    """,
+                    (
+                        body.get("full_name", "").strip(),
+                        body.get("email", "").strip(),
+                        body.get("phone", "").strip(),
+                        body.get("university", "").strip(),
+                        body.get("degree_level", "").strip(),
+                        body.get("bio", "").strip(),
+                        now,
+                    ),
+                )
+                return {"message": "Student profile saved & synced to phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/favorites/note":
+            def tx(conn: sqlite3.Connection) -> dict:
+                conn.execute(
+                    "UPDATE favorites SET personal_note = ? WHERE offer_id = ?",
+                    (body.get("personalNote", "").strip()[:200], int(body["offerId"])),
+                )
+                return {"message": "Favorite personal note saved & synced to phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/favorites/toggle":
+            def tx(conn: sqlite3.Connection) -> dict:
+                offer_id = int(body["offerId"])
+                existing = conn.execute("SELECT id FROM favorites WHERE offer_id = ?", (offer_id,)).fetchone()
+                if existing:
+                    conn.execute("DELETE FROM favorites WHERE offer_id = ?", (offer_id,))
+                    return {"message": f"Removed offer #{offer_id} from favorites on phone."}
+                row = conn.execute(
+                    """
+                    SELECT o.title_fr, o.title_ar, c.name AS company_name, l.city_fr, d.name_fr AS domain_fr,
+                           o.monthly_stipend_dzd, o.start_date, o.deadline
+                    FROM offers o
+                    INNER JOIN companies c ON c.id = o.company_id
+                    INNER JOIN locations l ON l.id = o.location_id
+                    INNER JOIN domains d ON d.id = o.domain_id
+                    WHERE o.id = ?
+                    """,
+                    (offer_id,),
+                ).fetchone()
+                if not row:
+                    raise ValueError(f"Offer #{offer_id} not found")
+                now = time.strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute(
+                    """
+                    INSERT INTO favorites (offer_id, added_at, offer_title_fr, offer_title_ar, company_name, city_fr, domain_fr, monthly_stipend_dzd, start_date, deadline, personal_note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')
+                    """,
+                    (
+                        offer_id,
+                        now,
+                        row["title_fr"],
+                        row["title_ar"],
+                        row["company_name"],
+                        row["city_fr"],
+                        row["domain_fr"],
+                        row["monthly_stipend_dzd"],
+                        row["start_date"],
+                        row["deadline"],
+                    ),
+                )
+                return {"message": f"Added offer #{offer_id} to favorites on phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/applications/status":
+            def tx(conn: sqlite3.Connection) -> dict:
+                app_id = int(body["applicationId"])
+                new_status = str(body["newStatus"]).strip()
+                note = str(body.get("note", "")).strip() or f"Updated from PC ({new_status})"
+                row = conn.execute("SELECT current_status FROM applications WHERE id = ?", (app_id,)).fetchone()
+                if not row:
+                    raise ValueError(f"Application #{app_id} not found")
+                old_status = row["current_status"]
+                now = time.strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute("UPDATE applications SET current_status = ? WHERE id = ?", (new_status, app_id))
+                conn.execute(
+                    "INSERT INTO status_history (application_id, old_status, new_status, changed_at, note) VALUES (?, ?, ?, ?, ?)",
+                    (app_id, old_status, new_status, now, note),
+                )
+                return {"message": f"Application #{app_id} moved {old_status} → {new_status} & pushed to phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/offers/save":
+            def tx(conn: sqlite3.Connection) -> dict:
+                offer_id = body.get("id")
+                title_fr = str(body["title_fr"]).strip()
+                title_ar = str(body.get("title_ar") or title_fr).strip()
+                desc_fr = str(body["description_fr"]).strip()
+                desc_ar = str(body.get("description_ar") or desc_fr).strip()
+                company_id = int(body["company_id"])
+                domain_id = int(body["domain_id"])
+                location_id = int(body["location_id"])
+                duration_months = max(1, min(24, int(body.get("duration_months", 3))))
+                is_paid = 1 if body.get("is_paid", True) else 0
+                stipend = int(body.get("monthly_stipend_dzd", 0)) if is_paid else 0
+                start_date = str(body.get("start_date", "2026-12-01")).strip()
+                deadline = str(body.get("deadline", "2027-01-31")).strip()
+                status = str(body.get("status", "OPEN")).strip()
+                now = time.strftime("%Y-%m-%d %H:%M:%S")
+
+                if offer_id:
+                    conn.execute(
+                        """
+                        UPDATE offers
+                        SET company_id=?, domain_id=?, location_id=?, title_fr=?, title_ar=?, description_fr=?, description_ar=?,
+                            duration_months=?, is_paid=?, monthly_stipend_dzd=?, start_date=?, status=?, deadline=?
+                        WHERE id=?
+                        """,
+                        (company_id, domain_id, location_id, title_fr, title_ar, desc_fr, desc_ar,
+                         duration_months, is_paid, stipend, start_date, status, deadline, int(offer_id)),
+                    )
+                    return {"message": f"Updated Offer #{offer_id} & pushed to phone!"}
+                else:
+                    cur = conn.execute(
+                        """
+                        INSERT INTO offers (company_id, domain_id, location_id, title_fr, title_ar, description_fr, description_ar,
+                                            duration_months, is_paid, monthly_stipend_dzd, start_date, status, deadline, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (company_id, domain_id, location_id, title_fr, title_ar, desc_fr, desc_ar,
+                         duration_months, is_paid, stipend, start_date, status, deadline, now),
+                    )
+                    return {"message": f"Created Offer #{cur.lastrowid} & pushed to phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/offers/delete":
+            def tx(conn: sqlite3.Connection) -> dict:
+                offer_id = int(body["offerId"])
+                conn.execute("DELETE FROM offers WHERE id = ?", (offer_id,))
+                return {"message": f"Deleted Offer #{offer_id} & pushed to phone!"}
+            self._send_json(BRIDGE.mutate(tx))
+
+        elif parsed.path == "/api/sql":
+            sql_text = str(body.get("sql", "")).strip()
+            if not sql_text:
+                self._send_json({"ok": False, "error": "Empty SQL statement."}, status=400)
+                return
+            is_read = bool(re.match(r"^(SELECT|PRAGMA|EXPLAIN)\b", sql_text, flags=re.IGNORECASE))
+            if is_read:
+                BRIDGE.pull_latest_db()
+                with BRIDGE._lock:
+                    if not BRIDGE._db_file.exists():
+                        self._send_json({"ok": False, "error": "No DB snapshot yet."})
+                        return
+                    conn = sqlite3.connect(f"file:{BRIDGE._db_file}?mode=ro", uri=True)
+                    conn.row_factory = sqlite3.Row
+                    try:
+                        qcur = conn.execute(sql_text)
+                        cols = [d[0] for d in qcur.description] if qcur.description else []
+                        rows = [dict(r) for r in qcur.fetchall()[:200]]
+                        self._send_json({"ok": True, "message": "Query completed", "result": {"columns": cols, "rows": rows, "error": None}})
+                    except Exception as exc:
+                        self._send_json({"ok": False, "error": str(exc)})
+                    finally:
+                        conn.close()
+            else:
+                def tx(conn: sqlite3.Connection) -> dict:
+                    qcur = conn.execute(sql_text)
+                    return {"message": f"SQL executed ({qcur.rowcount} rows) & pushed to phone!", "result": {"affectedRows": qcur.rowcount}}
+                self._send_json(BRIDGE.mutate(tx))
+        else:
+            self._send_json({"ok": False, "error": "Unknown endpoint"}, status=404)
+
 
 class ReusableTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
@@ -720,7 +618,8 @@ class ReusableTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 def main() -> None:
     url = f"http://{HOST}:{PORT}"
-    print(f"FirstStep Live SQLite Monitor starting at {url}")
+    print(f"FirstStep Live SQLite Editor & Monitor starting at {url}")
+    print(f"Serving HTML UI from: {HTML_FILE}")
     print(f"ADB detected: {BRIDGE.adb_path or 'NOT FOUND'}")
     print("Press Ctrl+C to stop.")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()

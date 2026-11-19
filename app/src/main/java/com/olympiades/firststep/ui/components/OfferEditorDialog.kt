@@ -264,11 +264,21 @@ fun OfferEditorDialog(
                         }
                         DropdownMenu(
                             expanded = locationMenuOpen,
-                            onDismissRequest = { locationMenuOpen = false }
+                            onDismissRequest = { locationMenuOpen = false },
+                            modifier = Modifier.heightIn(max = 360.dp)
                         ) {
-                            locations.forEach { location ->
+                            val sortedLocations = remember(locations, isArabic) {
+                                locations.sortedBy { if (isArabic) it.cityAr else it.cityFr }
+                            }
+                            sortedLocations.forEach { location ->
+                                val label = if (isArabic) location.cityAr else location.cityFr
+                                val region = if (isArabic) location.regionAr else location.regionFr
                                 DropdownMenuItem(
-                                    text = { Text(if (isArabic) location.cityAr else location.cityFr) },
+                                    text = {
+                                        Text(
+                                            text = if (region.isNotBlank()) "$label ($region)" else label
+                                        )
+                                    },
                                     onClick = {
                                         selectedLocationId = location.id
                                         locationMenuOpen = false

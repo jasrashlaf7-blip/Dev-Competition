@@ -13,16 +13,22 @@ import com.olympiades.firststep.data.local.FirstStepDatabase
 import com.olympiades.firststep.data.local.SeedDataLoader
 import com.olympiades.firststep.data.preferences.UserPreferencesDataStore
 import com.olympiades.firststep.data.repository.FirstStepRepositoryImpl
+import com.olympiades.firststep.data.preferences.UserPreferencesState
 import com.olympiades.firststep.domain.export.CsvExporter
+import com.olympiades.firststep.domain.model.AppLanguage
+import com.olympiades.firststep.domain.model.AppThemeMode
 import com.olympiades.firststep.domain.model.ApplicationStatus
 import com.olympiades.firststep.domain.model.ApplicationWithDetails
 import com.olympiades.firststep.domain.model.Company
 import com.olympiades.firststep.domain.model.Domain
+import com.olympiades.firststep.domain.model.FavoriteOffer
 import com.olympiades.firststep.domain.model.Location
 import com.olympiades.firststep.domain.model.Offer
 import com.olympiades.firststep.domain.model.OfferFilterCriteria
 import com.olympiades.firststep.domain.model.OfferSortOption
 import com.olympiades.firststep.domain.model.OfferStatus
+import com.olympiades.firststep.domain.model.StudentProfile
+import com.olympiades.firststep.domain.repository.FirstStepRepository
 import com.olympiades.firststep.domain.security.PinSecurityHelper
 import com.olympiades.firststep.domain.usecase.GetDomainsAndLocationsUseCase
 import com.olympiades.firststep.domain.usecase.GetFilteredOffersUseCase
@@ -35,7 +41,11 @@ import com.olympiades.firststep.ui.viewmodel.OffersUiState
 import com.olympiades.firststep.ui.viewmodel.OffersViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -360,5 +370,166 @@ class ModuleCSecurityAndMigrationTest {
             appliedAt = appliedAt,
             history = emptyList()
         )
+    }
+
+    @Test
+    fun `seed loads all 58 Algerian wilayas without breaking existing offers`() = runTest {
+        repository.ensureInitialized()
+        val locations = repository.observeLocations().first()
+        assertEquals(58, locations.size)
+        assertTrue(locations.any { it.cityFr == "Oran" && it.regionFr.contains("31") })
+        assertTrue(locations.any { it.cityFr == "Alger" && it.regionFr.contains("16") })
+        assertTrue(locations.any { it.cityFr == "Constantine" && it.regionFr.contains("25") })
+        assertTrue(locations.any { it.cityFr == "Adrar" && it.regionFr.contains("01") })
+        assertTrue(locations.any { it.cityFr == "El Meniaa" && it.regionFr.contains("58") })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `offers viewmodel works against FakeFirstStepRepository`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        val viewModelStore = ViewModelStore()
+        val fakeRepo = FakeFirstStepRepository()
+        try {
+            val factory = object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return OffersViewModel(
+                        repository = fakeRepo,
+                        getFilteredOffersUseCase = GetFilteredOffersUseCase(fakeRepo),
+                        getDomainsAndLocationsUseCase = GetDomainsAndLocationsUseCase(fakeRepo),
+                        manageOfferUseCase = ManageOfferUseCase(fakeRepo),
+                        toggleFavoriteUseCase = ToggleFavoriteUseCase(fakeRepo)
+                    ) as T
+                }
+            }
+            val provider = ViewModelProvider(viewModelStore, factory)
+            val vm = provider[OffersViewModel::class.java]
+
+            val initialState = vm.uiState.first { it is OffersUiState.Success } as OffersUiState.Success
+            assertEquals(2, initialState.offers.size)
+
+            vm.updateQuery("Kotlin")
+            val searchedState = vm.uiState.first {
+                it is OffersUiState.Success && it.offers.size == 1
+            } as OffersUiState.Success
+            assertEquals(101L, searchedState.offers.first().id)
+
+            vm.toggleFavorite(101L)
+            assertTrue(fakeRepo.favoriteIds.contains(101L))
+        } finally {
+            viewModelStore.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    private class FakeFirstStepRepository : FirstStepRepository {
+        private val offersFlow = MutableStateFlow(
+            listOf(
+                Offer(
+                    id = 101L,
+                    company = Company(1L, "TechAfrica", "IT", "تقنية", "", "", "", ""),
+                    domain = Domain(1L, "ICT", "تكنولوجيا"),
+                    location = Location(1L, "Oran", "وهران", "Wilaya 31", "ولاية 31"),
+                    titleFr = "Stage Android Kotlin",
+                    titleAr = "تربص أندرويد",
+                    descriptionFr = "Kotlin Compose",
+                    descriptionAr = "كوتلن",
+                    durationMonths = 3,
+                    isPaid = true,
+                    monthlyStipendDzd = 30_000,
+                    startDate = "2026-12-01",
+                    status = OfferStatus.OPEN,
+                    deadline = "2027-01-31",
+                    createdAt = "2026-11-10",
+                    skills = emptyList(),
+                    isFavorite = false,
+                    applicationStatus = null,
+                    applicationReference = null
+                ),
+                Offer(
+                    id = 102L,
+                    company = Company(2L, "DataMaghreb", "Data", "بيانات", "", "", "", ""),
+                    domain = Domain(2L, "Data", "البيانات"),
+                    location = Location(2L, "Alger", "الجزائر", "Wilaya 16", "ولاية 16"),
+                    titleFr = "Stage Power BI",
+                    titleAr = "تربص بيانات",
+                    descriptionFr = "SQL & Dashboards",
+                    descriptionAr = "بيانات",
+                    durationMonths = 4,
+                    isPaid = false,
+                    monthlyStipendDzd = 0,
+                    startDate = "2026-12-10",
+                    status = OfferStatus.OPEN,
+                    deadline = "2027-02-15",
+                    createdAt = "2026-11-09",
+                    skills = emptyList(),
+                    isFavorite = false,
+                    applicationStatus = null,
+                    applicationReference = null
+                )
+            )
+        )
+        val favoriteIds = mutableSetOf<Long>()
+
+        override suspend fun ensureInitialized() = Unit
+
+        override fun observeFilteredOffers(criteria: OfferFilterCriteria): Flow<List<Offer>> =
+            offersFlow.map { list ->
+                list.filter { offer ->
+                    (criteria.query.isBlank() || offer.titleFr.contains(criteria.query, ignoreCase = true)) &&
+                        (!criteria.paidOnly || offer.isPaid) &&
+                        (criteria.minStipendDzd == null || offer.monthlyStipendDzd >= criteria.minStipendDzd)
+                }
+            }
+
+        override fun observeOfferById(offerId: Long): Flow<Offer?> =
+            offersFlow.map { list -> list.find { it.id == offerId } }
+
+        override fun observeDomains(): Flow<List<Domain>> =
+            flowOf(listOf(Domain(1L, "ICT", "تكنولوجيا"), Domain(2L, "Data", "البيانات")))
+
+        override fun observeLocations(): Flow<List<Location>> =
+            flowOf(listOf(Location(1L, "Oran", "وهران", "Wilaya 31", "ولاية 31")))
+
+        override fun observeCompanies(): Flow<List<Company>> = flowOf(emptyList())
+        override suspend fun createOffer(
+            companyId: Long, domainId: Long, locationId: Long, titleFr: String, titleAr: String,
+            descriptionFr: String, descriptionAr: String, durationMonths: Int, isPaid: Boolean,
+            monthlyStipendDzd: Int, startDate: String, status: OfferStatus, deadline: String
+        ): Result<Long> = Result.success(103L)
+
+        override suspend fun updateOffer(
+            offerId: Long, companyId: Long, domainId: Long, locationId: Long, titleFr: String,
+            titleAr: String, descriptionFr: String, descriptionAr: String, durationMonths: Int,
+            isPaid: Boolean, monthlyStipendDzd: Int, startDate: String, status: OfferStatus, deadline: String
+        ): Result<Unit> = Result.success(Unit)
+
+        override suspend fun deleteOffer(offerId: Long): Result<Unit> = Result.success(Unit)
+        override fun observeFavorites(): Flow<List<FavoriteOffer>> = flowOf(emptyList())
+        override fun observeFavoriteCount(): Flow<Int> = flowOf(favoriteIds.size)
+        override suspend fun toggleFavorite(offerId: Long): Boolean =
+            if (favoriteIds.remove(offerId)) false else favoriteIds.add(offerId)
+        override suspend fun restoreFavorite(offerId: Long) { favoriteIds.add(offerId) }
+        override suspend fun updateFavoriteNote(offerId: Long, personalNote: String) = Unit
+        override fun observeApplications(statusFilter: ApplicationStatus?): Flow<List<ApplicationWithDetails>> = flowOf(emptyList())
+        override suspend fun submitApplication(
+            offerId: Long, applicantName: String, applicantEmail: String,
+            applicantPhone: String, coverLetter: String, cvUri: String, initialNote: String
+        ): Result<String> = Result.success("FS-2026-0001")
+        override suspend fun updateApplicationStatus(applicationId: Long, newStatus: ApplicationStatus, note: String): Result<Unit> = Result.success(Unit)
+        override suspend fun updateApplicationDetails(
+            applicationId: Long, applicantName: String, applicantEmail: String,
+            applicantPhone: String, coverLetter: String, cvUri: String, editNote: String
+        ): Result<Unit> = Result.success(Unit)
+        override fun observeStudentProfile(): Flow<StudentProfile?> = flowOf(null)
+        override suspend fun updateStudentProfile(profile: StudentProfile): Result<Unit> = Result.success(Unit)
+        override fun observePreferences(): Flow<UserPreferencesState> = flowOf(UserPreferencesState())
+        override suspend fun setLanguage(language: AppLanguage) = Unit
+        override suspend fun setThemeMode(themeMode: AppThemeMode) = Unit
+        override suspend fun enablePinLock(pin: String) = Unit
+        override suspend fun disablePinLock() = Unit
+        override suspend fun saveLastFilters(criteria: OfferFilterCriteria) = Unit
     }
 }

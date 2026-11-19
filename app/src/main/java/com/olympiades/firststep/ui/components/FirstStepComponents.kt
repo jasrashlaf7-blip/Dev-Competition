@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -97,7 +98,7 @@ fun FirstStepFilterChip(
                 scaleX = chipScale
                 scaleY = chipScale
             }
-            .height(32.dp)
+            .heightIn(min = 32.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Checkbox, onClick = onClick)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
@@ -107,7 +108,7 @@ fun FirstStepFilterChip(
         border = border
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -157,10 +158,10 @@ fun StatusBadge(
     )
     Box(
         modifier = modifier
-            .height(22.dp)
+            .heightIn(min = 22.dp)
             .clip(RoundedCornerShape(11.dp))
             .background(animatedColor)
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(

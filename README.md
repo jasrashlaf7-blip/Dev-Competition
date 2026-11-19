@@ -7,10 +7,10 @@ Conçue pour les **Olympiades Africaines des Métiers — Oran 2026**, elle perm
 
 ## Fonctionnalités principales
 
-- **Catalogue d'offres bilingue (FR / AR + RTL complet)** : 32 offres pré-chargées depuis `assets/firststep_seed.json`, couvrant plusieurs domaines et wilayas/villes.
-- **Recherche multi-mots & tolérante aux accents/variantes** : recherche par n'importe quel mot dans n'importe quel ordre sur le titre FR/AR, entreprise, ville, domaine, compétences et description (classement par pertinence avec priorité aux titres).
+- **Catalogue d'offres bilingue (FR / AR + RTL complet)** : 32 offres pré-chargées depuis `assets/firststep_seed.json`, couvrant 4 domaines et les **58 wilayas d'Algérie (01 Adrar → 58 El Meniaa)** en français et en arabe.
+- **Recherche multi-mots & tolérante aux accents/variantes** : recherche par n'importe quel mot dans n'importe quel ordre sur le titre FR/AR, entreprise, wilaya, domaine, compétences et description (classement par pertinence avec priorité aux titres).
 - **Filtres combinables & tri avancé (Room v2)** :
-  - Tous / Payé / Gratification `≥ 25 000 DA` / Ouvert / Domaine / Ville.
+  - Tous / Payé / Gratification `≥ 25 000 DA` / Ouvert / Domaine / Wilaya (58 wilayas).
   - Tri par : Plus récentes, Date limite proche, **Gratification max (`HIGHEST_STIPEND`)**.
 - **Favoris enrichis dans SQLite** : enregistrement dans la table `favorites` avec toutes les métadonnées descriptives de l'offre (`offer_title_fr`, `offer_title_ar`, `company_name`, `city_fr`, `domain_fr`, `monthly_stipend_dzd`, `start_date`, `deadline`) + **note personnelle (`personal_note`)** éditable.
 - **Suivi des candidatures & alerte > 7 jours** :
@@ -26,18 +26,31 @@ Conçue pour les **Olympiades Africaines des Métiers — Oran 2026**, elle perm
 
 ---
 
+## Jeu de données & Profil de test par défaut
+
+- **Profil étudiant pré-chargé :** `Amina Saidi` (`amina.saidi@email.dz`, `+213 555 12 34 56`, `Univ. Oran 1`, `L3 Informatique`).
+- **Code PIN local :** désactivé par défaut au premier lancement ; activable à tout moment depuis *Profil → Sécurité locale → Verrouillage par code PIN*.
+
+---
+
 ## Prérequis & Compilation Hors Ligne
 
-- **Android Studio** (AGP 8+ / Kotlin / Compile SDK 36, Min SDK 24)
+- **Android Studio** (AGP 9+ / Kotlin / Compile SDK 36, Min SDK 24)
 - **JDK 11+**
 - **Python 3.10+** (optionnel, pour le moniteur PC USB `tools/live_db_dashboard.py`)
 
-```bash
-# Compiler l'APK Debug
-gradle :app:assembleDebug
+### Correctif Windows (`debug.keystore not found`) après export ZIP
+Le dépôt inclut `debug.keystore.base64` (sans le binaire `debug.keystore`). Sur Windows dans Android Studio :
+1. Double-cliquez sur **`Fix_Windows_Keystore.bat`** à la racine du projet (ou exécutez dans CMD : `certutil -decode debug.keystore.base64 debug.keystore`).
+2. Relancez **Build / Run** dans Android Studio.
 
-# Exécuter les tests unitaires & Robolectric (hors ligne)
-gradle :app:testDebugUnitTest
+```bash
+# Script reproductible hors ligne (Linux/macOS/Git Bash)
+bash tools/build_offline.sh
+
+# Ou manuellement :
+gradle --offline :app:assembleDebug
+gradle --offline :app:testDebugUnitTest
 
 # Lancer le moniteur SQLite PC en temps réel (téléphone branché en USB Debugging)
 python tools/live_db_dashboard.py

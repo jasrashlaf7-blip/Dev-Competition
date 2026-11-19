@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -277,7 +278,8 @@ fun OffersScreen(
                             )
                             DropdownMenu(
                                 expanded = locationMenuExpanded,
-                                onDismissRequest = { locationMenuExpanded = false }
+                                onDismissRequest = { locationMenuExpanded = false },
+                                modifier = Modifier.heightIn(max = 360.dp)
                             ) {
                                 DropdownMenuItem(
                                     text = { Text(strings.filterAllLocations) },
@@ -286,10 +288,27 @@ fun OffersScreen(
                                         locationMenuExpanded = false
                                     }
                                 )
-                                state.locations.forEach { location ->
+                                val sortedLocations = remember(state.locations, isArabic) {
+                                    state.locations.sortedBy { if (isArabic) it.cityAr else it.cityFr }
+                                }
+                                sortedLocations.forEach { location ->
+                                    val label = if (isArabic) location.cityAr else location.cityFr
+                                    val region = if (isArabic) location.regionAr else location.regionFr
                                     DropdownMenuItem(
                                         text = {
-                                            Text(if (isArabic) location.cityAr else location.cityFr)
+                                            Column {
+                                                Text(
+                                                    text = label,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                if (region.isNotBlank()) {
+                                                    Text(
+                                                        text = region,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                         },
                                         onClick = {
                                             viewModel.selectLocation(location.id)

@@ -46,3 +46,16 @@
 1. **Chiffrement SQLite au repos :** sur appareil rooté avec accès physique, `firststep_offline.db` reste lisible en clair ; une évolution future consisterait à intégrer SQLCipher avec clé stockée dans Android Keystore.
 2. **Authentification biométrique :** l'intégration de `BiometricPrompt` (AndroidX Biometric) complèterait le code PIN SHA-256 pour un déverrouillage matériel fort.
 3. **Limitation des tentatives PIN :** l'ajout d'un délai exponentiel après 5 saisies erronées renforcerait la protection contre le brute-force hors ligne.
+
+---
+
+## 6. Checklist Manifeste Durci (`AndroidManifest.xml`)
+
+- [x] **Zéro permission réseau** (`INTERNET` et `ACCESS_NETWORK_STATE` non déclarées).
+- [x] **Permissions minimales** : aucune permission dangereuse (`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `READ_MEDIA_*` absentes).
+- [x] **`android:allowBackup="false"`** activé sur `<application>`.
+- [x] **Règles d'extraction restrictives** : `android:fullBackupContent="@xml/backup_rules"` et `android:dataExtractionRules="@xml/data_extraction_rules"` excluent explicitement `database`, `sharedpref`, `file` et `root`.
+- [x] **Composants non exportés** : seule `MainActivity` (`LAUNCHER`) est `android:exported="true"`.
+- [x] **`FileProvider` sécurisé** : `android:exported="false"` et `android:grantUriPermissions="true"` limité au répertoire temporaire `cache/exports/` via `res/xml/file_paths.xml`.
+- [x] **Build release durcie** : `isMinifyEnabled = true`, `isShrinkResources = true` et suppression des logs Debug via ProGuard/R8.
+
