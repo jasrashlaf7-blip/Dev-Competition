@@ -66,6 +66,8 @@ fun OfferEditorDialog(
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int,
+        startDate: String,
         status: OfferStatus,
         deadline: String
     ) -> Unit,
@@ -90,10 +92,16 @@ fun OfferEditorDialog(
     var durationText by remember(existingOffer?.id) {
         mutableStateOf((existingOffer?.durationMonths ?: 3).toString())
     }
+    var isPaid by remember(existingOffer?.id) { mutableStateOf(existingOffer?.isPaid ?: true) }
+    var stipendText by remember(existingOffer?.id) {
+        mutableStateOf((existingOffer?.monthlyStipendDzd ?: 25000).toString())
+    }
+    var startDate by remember(existingOffer?.id) {
+        mutableStateOf(existingOffer?.startDate?.ifBlank { "2026-12-01" } ?: "2026-12-01")
+    }
     var deadline by remember(existingOffer?.id) {
         mutableStateOf(existingOffer?.deadline ?: "2026-12-31")
     }
-    var isPaid by remember(existingOffer?.id) { mutableStateOf(existingOffer?.isPaid ?: true) }
     var status by remember(existingOffer?.id) {
         mutableStateOf(existingOffer?.status ?: OfferStatus.OPEN)
     }
@@ -317,6 +325,39 @@ fun OfferEditorDialog(
                     )
                 }
 
+                // Stipend (DZD) & Start Date
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = if (isPaid) stipendText else "0",
+                        onValueChange = { stipendText = it.filter { ch -> ch.isDigit() } },
+                        enabled = isPaid,
+                        label = { Text(strings.monthlyStipendLabel) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("offer_editor_stipend"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = startDate,
+                        onValueChange = {
+                            startDate = it
+                            showError = false
+                        },
+                        label = { Text(strings.startDateLabel) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .testTag("offer_editor_start_date"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+
                 // Status chips
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -374,8 +415,15 @@ fun OfferEditorDialog(
             Button(
                 onClick = {
                     val months = durationText.toIntOrNull() ?: 0
+                    val stipend = if (isPaid) (stipendText.toIntOrNull() ?: 0) else 0
+                    val trimmedStartDate = startDate.trim()
                     val trimmedDeadline = deadline.trim()
-                    if (titleFr.isBlank() || descFr.isBlank() || months !in 1..24 || !ISO_DATE_REGEX.matches(trimmedDeadline)) {
+                    if (titleFr.isBlank() ||
+                        descFr.isBlank() ||
+                        months !in 1..24 ||
+                        !ISO_DATE_REGEX.matches(trimmedDeadline) ||
+                        !ISO_DATE_REGEX.matches(trimmedStartDate)
+                    ) {
                         showError = true
                     } else {
                         onSave(
@@ -388,6 +436,8 @@ fun OfferEditorDialog(
                             descAr,
                             months,
                             isPaid,
+                            stipend,
+                            trimmedStartDate,
                             status,
                             trimmedDeadline
                         )

@@ -18,14 +18,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,13 +44,18 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,13 +63,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.olympiades.firststep.domain.model.AppLanguage
 import com.olympiades.firststep.domain.model.AppThemeMode
+import com.olympiades.firststep.domain.security.PinSecurityHelper
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
 import com.olympiades.firststep.ui.viewmodel.ProfileViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,11 +85,81 @@ fun ProfileScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val editDraft = viewModel.editDraft
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf(false) }
 
     LaunchedEffect(strings) {
         viewModel.savedEvents.collect {
             snackbarHostState.showSnackbar(strings.profileSavedSnackbar)
         }
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pinInput = ""
+                pinError = false
+            },
+            title = { Text(strings.setupPinDialogTitle) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { raw ->
+                            val digits = raw.filter { it.isDigit() }.take(4)
+                            pinInput = digits
+                            pinError = false
+                        },
+                        label = { Text(strings.enterPinLabel) },
+                        singleLine = true,
+                        isError = pinError,
+                        supportingText = if (pinError) {
+                            { Text(strings.pinFormatError) }
+                        } else null,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_pin_input"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (PinSecurityHelper.isValidPinFormat(pinInput)) {
+                            viewModel.enablePinLock(pinInput)
+                            showPinDialog = false
+                            pinInput = ""
+                            pinError = false
+                            scope.launch {
+                                snackbarHostState.showSnackbar(strings.pinEnabledSnackbar)
+                            }
+                        } else {
+                            pinError = true
+                        }
+                    },
+                    modifier = Modifier.testTag("confirm_setup_pin_button")
+                ) {
+                    Text(strings.confirmAction)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPinDialog = false
+                        pinInput = ""
+                        pinError = false
+                    }
+                ) {
+                    Text(strings.cancelAction)
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -418,6 +500,75 @@ fun ProfileScreen(
                                     Text(text = strings.themeDarkLabel)
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Local Security Card (Optional 4-digit PIN lock)
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = strings.securitySectionTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Column {
+                                    Text(
+                                        text = strings.pinLockLabel,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (uiState.pinLockEnabled) {
+                                            strings.pinLockEnabledDesc
+                                        } else {
+                                            strings.pinLockDisabledDesc
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = uiState.pinLockEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) {
+                                        pinInput = ""
+                                        pinError = false
+                                        showPinDialog = true
+                                    } else {
+                                        viewModel.disablePinLock()
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(strings.pinDisabledSnackbar)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.testTag("pin_lock_switch")
+                            )
                         }
                     }
                 }

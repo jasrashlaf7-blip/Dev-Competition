@@ -40,6 +40,8 @@ class ManageOfferUseCase(private val repository: FirstStepRepository) {
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ): Result<Long> = repository.createOffer(
@@ -52,6 +54,8 @@ class ManageOfferUseCase(private val repository: FirstStepRepository) {
         descriptionAr = descriptionAr,
         durationMonths = durationMonths,
         isPaid = isPaid,
+        monthlyStipendDzd = monthlyStipendDzd,
+        startDate = startDate,
         status = status,
         deadline = deadline
     )
@@ -67,6 +71,8 @@ class ManageOfferUseCase(private val repository: FirstStepRepository) {
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ): Result<Unit> = repository.updateOffer(
@@ -80,6 +86,8 @@ class ManageOfferUseCase(private val repository: FirstStepRepository) {
         descriptionAr = descriptionAr,
         durationMonths = durationMonths,
         isPaid = isPaid,
+        monthlyStipendDzd = monthlyStipendDzd,
+        startDate = startDate,
         status = status,
         deadline = deadline
     )
@@ -90,6 +98,7 @@ class ManageOfferUseCase(private val repository: FirstStepRepository) {
 class ToggleFavoriteUseCase(private val repository: FirstStepRepository) {
     suspend operator fun invoke(offerId: Long): Boolean = repository.toggleFavorite(offerId)
     suspend fun restore(offerId: Long) = repository.restoreFavorite(offerId)
+    suspend fun updatePersonalNote(offerId: Long, note: String) = repository.updateFavoriteNote(offerId, note)
     fun observeFavorites(): Flow<List<FavoriteOffer>> = repository.observeFavorites()
     fun observeFavoriteCount(): Flow<Int> = repository.observeFavoriteCount()
 }

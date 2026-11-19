@@ -34,6 +34,8 @@ interface FirstStepRepository {
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ): Result<Long>
@@ -49,6 +51,8 @@ interface FirstStepRepository {
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ): Result<Unit>
@@ -59,6 +63,7 @@ interface FirstStepRepository {
     fun observeFavoriteCount(): Flow<Int>
     suspend fun toggleFavorite(offerId: Long): Boolean
     suspend fun restoreFavorite(offerId: Long)
+    suspend fun updateFavoriteNote(offerId: Long, personalNote: String)
 
     fun observeApplications(statusFilter: ApplicationStatus?): Flow<List<ApplicationWithDetails>>
     suspend fun submitApplication(
@@ -93,5 +98,7 @@ interface FirstStepRepository {
     fun observePreferences(): Flow<UserPreferencesState>
     suspend fun setLanguage(language: AppLanguage)
     suspend fun setThemeMode(themeMode: AppThemeMode)
+    suspend fun enablePinLock(pin: String)
+    suspend fun disablePinLock()
     suspend fun saveLastFilters(criteria: OfferFilterCriteria)
 }

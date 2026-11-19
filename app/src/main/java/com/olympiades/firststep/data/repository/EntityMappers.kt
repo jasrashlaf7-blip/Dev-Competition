@@ -85,6 +85,8 @@ fun OfferWithRelations.toDomain(): Offer = Offer(
     descriptionAr = offer.descriptionAr,
     durationMonths = offer.durationMonths,
     isPaid = offer.isPaid,
+    monthlyStipendDzd = offer.monthlyStipendDzd,
+    startDate = offer.startDate,
     status = offer.status,
     deadline = offer.deadline,
     createdAt = offer.createdAt,
@@ -97,6 +99,7 @@ fun OfferWithRelations.toDomain(): Offer = Offer(
 fun FavoriteWithOffer.toDomain(): FavoriteOffer = FavoriteOffer(
     favoriteId = favorite.id,
     addedAt = favorite.addedAt,
+    personalNote = favorite.personalNote,
     offer = offerWithRelations.toDomain()
 )
 

@@ -89,6 +89,8 @@ class OfferDetailViewModel(
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ) {
@@ -104,6 +106,8 @@ class OfferDetailViewModel(
                 descriptionAr = descriptionAr,
                 durationMonths = durationMonths,
                 isPaid = isPaid,
+                monthlyStipendDzd = if (isPaid) monthlyStipendDzd else 0,
+                startDate = startDate,
                 status = status,
                 deadline = deadline
             )

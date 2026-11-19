@@ -164,26 +164,56 @@ class LiveDbBridge:
                 profile_row = cur.execute("SELECT * FROM student_profiles WHERE id = 1 LIMIT 1").fetchone()
                 profile = dict(profile_row) if profile_row else None
 
-                favorites = [
-                    dict(r)
-                    for r in cur.execute(
-                        """
-                        SELECT f.id AS favorite_id, f.offer_id, f.added_at,
-                               o.title_fr, o.title_ar, o.duration_months, o.is_paid, o.status, o.deadline,
-                               c.name AS company_name,
-                               d.name_fr AS domain_fr, d.name_ar AS domain_ar,
-                               l.city_fr, l.city_ar,
-                               a.reference AS application_reference, a.current_status AS application_status
-                        FROM favorites f
-                        INNER JOIN offers o ON o.id = f.offer_id
-                        INNER JOIN companies c ON c.id = o.company_id
-                        INNER JOIN domains d ON d.id = o.domain_id
-                        INNER JOIN locations l ON l.id = o.location_id
-                        LEFT JOIN applications a ON a.offer_id = o.id
-                        ORDER BY f.added_at DESC, f.id DESC
-                        """
-                    ).fetchall()
-                ]
+                fav_cols = {
+                    r["name"] for r in cur.execute("PRAGMA table_info(favorites)").fetchall()
+                }
+                offer_cols = {
+                    r["name"] for r in cur.execute("PRAGMA table_info(offers)").fetchall()
+                }
+                has_v2_fav = "offer_title_fr" in fav_cols
+                has_v2_offer = "monthly_stipend_dzd" in offer_cols
+
+                if has_v2_fav:
+                    favorites = [
+                        dict(r)
+                        for r in cur.execute(
+                            """
+                            SELECT f.id AS favorite_id, f.offer_id, f.added_at,
+                                   f.offer_title_fr AS title_fr, f.offer_title_ar AS title_ar,
+                                   f.company_name, f.city_fr, f.domain_fr,
+                                   f.monthly_stipend_dzd, f.start_date, f.deadline, f.personal_note,
+                                   COALESCE(o.duration_months, 0) AS duration_months,
+                                   COALESCE(o.is_paid, CASE WHEN f.monthly_stipend_dzd > 0 THEN 1 ELSE 0 END) AS is_paid,
+                                   a.reference AS application_reference, a.current_status AS application_status
+                            FROM favorites f
+                            LEFT JOIN offers o ON o.id = f.offer_id
+                            LEFT JOIN applications a ON a.offer_id = f.offer_id
+                            ORDER BY f.added_at DESC, f.id DESC
+                            """
+                        ).fetchall()
+                    ]
+                else:
+                    favorites = [
+                        dict(r)
+                        for r in cur.execute(
+                            """
+                            SELECT f.id AS favorite_id, f.offer_id, f.added_at,
+                                   o.title_fr, o.title_ar, o.duration_months, o.is_paid, o.status, o.deadline,
+                                   0 AS monthly_stipend_dzd, '' AS start_date, '' AS personal_note,
+                                   c.name AS company_name,
+                                   d.name_fr AS domain_fr, d.name_ar AS domain_ar,
+                                   l.city_fr, l.city_ar,
+                                   a.reference AS application_reference, a.current_status AS application_status
+                            FROM favorites f
+                            INNER JOIN offers o ON o.id = f.offer_id
+                            INNER JOIN companies c ON c.id = o.company_id
+                            INNER JOIN domains d ON d.id = o.domain_id
+                            INNER JOIN locations l ON l.id = o.location_id
+                            LEFT JOIN applications a ON a.offer_id = o.id
+                            ORDER BY f.added_at DESC, f.id DESC
+                            """
+                        ).fetchall()
+                    ]
 
                 history_rows = [
                     dict(r)
@@ -195,20 +225,31 @@ class LiveDbBridge:
                 for h in history_rows:
                     history_by_app.setdefault(int(h["application_id"]), []).append(h)
 
+                today_str = time.strftime("%Y-%m-%d")
                 applications = []
                 for r in cur.execute(
                     """
-                    SELECT a.*, o.title_fr AS offer_title_fr, o.title_ar AS offer_title_ar,
-                           c.name AS company_name, l.city_fr, d.name_fr AS domain_fr
+                    SELECT a.*,
+                           COALESCE(o.title_fr, '') AS offer_title_fr,
+                           COALESCE(o.title_ar, '') AS offer_title_ar,
+                           COALESCE(c.name, '') AS company_name,
+                           COALESCE(l.city_fr, '') AS city_fr,
+                           COALESCE(d.name_fr, '') AS domain_fr,
+                           CAST(julianday(?) - julianday(substr(a.applied_at, 1, 10)) AS INTEGER) AS days_since_applied
                     FROM applications a
-                    INNER JOIN offers o ON o.id = a.offer_id
-                    INNER JOIN companies c ON c.id = o.company_id
-                    INNER JOIN locations l ON l.id = o.location_id
-                    INNER JOIN domains d ON d.id = o.domain_id
+                    LEFT JOIN offers o ON o.id = a.offer_id
+                    LEFT JOIN companies c ON c.id = o.company_id
+                    LEFT JOIN locations l ON l.id = o.location_id
+                    LEFT JOIN domains d ON d.id = o.domain_id
                     ORDER BY a.applied_at DESC, a.id DESC
-                    """
+                    """,
+                    (today_str,),
                 ).fetchall():
                     item = dict(r)
+                    days = item.get("days_since_applied") or 0
+                    item["unanswered_over_7_days"] = (
+                        item.get("current_status") == "SUBMITTED" and days > 7
+                    )
                     item["history"] = history_by_app.get(int(item["id"]), [])
                     applications.append(item)
 
@@ -229,6 +270,10 @@ class LiveDbBridge:
                         """
                     ).fetchall()
                 ]
+                if not has_v2_offer:
+                    for o in offers:
+                        o.setdefault("monthly_stipend_dzd", 0)
+                        o.setdefault("start_date", "")
 
                 custom_result = None
                 if custom_sql and custom_sql.strip():
@@ -459,7 +504,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <script>
     let currentTab = 'applications';
     let lastData = null;
-    let activeSql = 'SELECT id, reference, applicant_name, applicant_email, current_status, applied_at FROM applications ORDER BY id DESC';
+    let activeSql = 'SELECT id, offer_id, offer_title_fr, company_name, city_fr, monthly_stipend_dzd, start_date, deadline, personal_note, added_at FROM favorites ORDER BY id DESC';
 
     function esc(v) {
       if (v === null || v === undefined) return '';
@@ -497,11 +542,11 @@ HTML_PAGE = """<!DOCTYPE html>
           return;
         }
         panel.innerHTML = `<table>
-          <thead><tr><th>Ref</th><th>Offer &amp; Company</th><th>Applicant Details</th><th>Cover Letter &amp; CV</th><th>Status</th><th>Status History</th></tr></thead>
+          <thead><tr><th>Ref</th><th>Offer &amp; Snapshot</th><th>Applicant Details</th><th>Cover Letter &amp; CV</th><th>Status</th><th>Status History</th></tr></thead>
           <tbody>${d.applications.map(a => `
             <tr>
-              <td><strong>${esc(a.reference)}</strong><br><small>${esc(a.applied_at)}</small></td>
-              <td><strong>${esc(a.offer_title_fr)}</strong><br><small>${esc(a.company_name)} · ${esc(a.city_fr)}</small></td>
+              <td><strong>${esc(a.reference)}</strong><br><small>${esc(a.applied_at)}</small>${a.unanswered_over_7_days ? `<br><span class="badge UNDER_REVIEW">&gt;7j (${esc(a.days_since_applied)}j)</span>` : ''}</td>
+              <td><strong>${esc(a.offer_title_snapshot || a.offer_title_fr)}</strong><br><small>${esc(a.company_name_snapshot || a.company_name)} · ${esc(a.city_fr)}${a.monthly_stipend_dzd > 0 ? ' · ' + esc(a.monthly_stipend_dzd) + ' DA' : ''}</small></td>
               <td><strong>${esc(a.applicant_name)}</strong><br>${esc(a.applicant_email)}<br>${esc(a.applicant_phone)}</td>
               <td>${esc(a.cover_letter)}<br><small>CV: ${esc(a.cv_uri || '—')}</small></td>
               <td><span class="badge ${esc(a.current_status)}">${esc(a.current_status)}</span></td>
@@ -514,15 +559,15 @@ HTML_PAGE = """<!DOCTYPE html>
           return;
         }
         panel.innerHTML = `<table>
-          <thead><tr><th>Fav ID</th><th>Offer</th><th>Company &amp; Location</th><th>Domain &amp; Terms</th><th>Application</th><th>Added At</th></tr></thead>
+          <thead><tr><th>Fav ID</th><th>Saved Offer Metadata (in <code>favorites</code>)</th><th>Company &amp; City</th><th>Stipend &amp; Dates</th><th>Personal Note</th><th>Status &amp; Added At</th></tr></thead>
           <tbody>${d.favorites.map(f => `
             <tr>
-              <td>#${esc(f.favorite_id)} (offer_id=${esc(f.offer_id)})</td>
+              <td>#${esc(f.favorite_id)}<br><small>offer_id=${esc(f.offer_id)}</small></td>
               <td><strong>${esc(f.title_fr)}</strong><br><small>${esc(f.title_ar)}</small></td>
-              <td>${esc(f.company_name)}<br><small>${esc(f.city_fr)}</small></td>
-              <td>${esc(f.domain_fr)} · ${esc(f.duration_months)}m · <span class="badge ${f.is_paid ? 'PAID' : 'CLOSED'}">${f.is_paid ? 'PAID' : 'UNPAID'}</span></td>
-              <td>${f.application_status ? `<span class="badge ${esc(f.application_status)}">${esc(f.application_reference)} (${esc(f.application_status)})</span>` : '<small>Not applied</small>'}</td>
-              <td>${esc(f.added_at)}</td>
+              <td>${esc(f.company_name)}<br><small>${esc(f.city_fr)} · ${esc(f.domain_fr)}</small></td>
+              <td><span class="badge ${f.is_paid ? 'PAID' : 'CLOSED'}">${f.monthly_stipend_dzd > 0 ? esc(f.monthly_stipend_dzd) + ' DA/m' : (f.is_paid ? 'PAID' : 'UNPAID')}</span><br><small>Début: ${esc(f.start_date || '—')} · Lim: ${esc(f.deadline || '—')}</small></td>
+              <td>${f.personal_note ? `<strong>${esc(f.personal_note)}</strong>` : '<small>—</small>'}</td>
+              <td>${f.application_status ? `<span class="badge ${esc(f.application_status)}">${esc(f.application_reference)} (${esc(f.application_status)})</span>` : '<small>Not applied</small>'}<br><small>${esc(f.added_at)}</small></td>
             </tr>`).join('')}</tbody>
         </table>`;
       } else if (currentTab === 'profile') {
@@ -546,14 +591,14 @@ HTML_PAGE = """<!DOCTYPE html>
         </table>`;
       } else if (currentTab === 'offers') {
         panel.innerHTML = `<table>
-          <thead><tr><th>ID</th><th>Title (FR / AR)</th><th>Company &amp; City</th><th>Domain</th><th>Status &amp; Deadline</th><th>Fav / App</th></tr></thead>
+          <thead><tr><th>ID</th><th>Title (FR / AR)</th><th>Company &amp; City</th><th>Domain &amp; Stipend</th><th>Status &amp; Dates</th><th>Fav / App</th></tr></thead>
           <tbody>${d.offers.map(o => `
             <tr>
               <td>${esc(o.id)}</td>
               <td><strong>${esc(o.title_fr)}</strong><br><small>${esc(o.title_ar)}</small></td>
               <td>${esc(o.company_name)} · ${esc(o.city_fr)}</td>
-              <td>${esc(o.domain_fr)} (${esc(o.duration_months)}m)</td>
-              <td><span class="badge ${esc(o.status)}">${esc(o.status)}</span> <small>${esc(o.deadline)}</small></td>
+              <td>${esc(o.domain_fr)} (${esc(o.duration_months)}m)<br><small>${o.monthly_stipend_dzd > 0 ? esc(o.monthly_stipend_dzd) + ' DA/mois' : (o.is_paid ? 'Payé' : 'Non rémunéré')}</small></td>
+              <td><span class="badge ${esc(o.status)}">${esc(o.status)}</span><br><small>Début: ${esc(o.start_date || '—')} · Lim: ${esc(o.deadline)}</small></td>
               <td>${o.is_favorite ? '❤️ Fav ' : ''}${o.application_reference ? `<span class="badge ${esc(o.application_status)}">${esc(o.application_reference)}</span>` : ''}</td>
             </tr>`).join('')}</tbody>
         </table>`;

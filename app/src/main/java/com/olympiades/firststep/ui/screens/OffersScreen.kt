@@ -199,6 +199,7 @@ fun OffersScreen(
                             label = strings.filterAll,
                             selected = !criteria.paidOnly &&
                                 !criteria.openOnly &&
+                                (criteria.minStipendDzd == null || criteria.minStipendDzd == 0) &&
                                 criteria.domainId == null &&
                                 criteria.locationId == null &&
                                 searchQuery.isBlank(),
@@ -211,6 +212,13 @@ fun OffersScreen(
                             selected = criteria.paidOnly,
                             onClick = viewModel::togglePaidOnly,
                             testTag = "filter_chip_paid"
+                        )
+
+                        FirstStepFilterChip(
+                            label = strings.filterMinStipend,
+                            selected = (criteria.minStipendDzd ?: 0) >= 25_000,
+                            onClick = { viewModel.toggleMinStipendFilter(25_000) },
+                            testTag = "filter_chip_min_stipend"
                         )
 
                         FirstStepFilterChip(
@@ -359,6 +367,7 @@ fun OffersScreen(
                                         text = when (criteria.sortOption) {
                                             OfferSortOption.NEWEST -> strings.sortNewest
                                             OfferSortOption.CLOSEST_DEADLINE -> strings.sortClosestDeadline
+                                            OfferSortOption.HIGHEST_STIPEND -> strings.sortHighestStipend
                                         },
                                         style = MaterialTheme.typography.labelMedium
                                     )
@@ -378,6 +387,13 @@ fun OffersScreen(
                                         text = { Text(strings.sortClosestDeadline) },
                                         onClick = {
                                             viewModel.selectSortOption(OfferSortOption.CLOSEST_DEADLINE)
+                                            sortMenuExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(strings.sortHighestStipend) },
+                                        onClick = {
+                                            viewModel.selectSortOption(OfferSortOption.HIGHEST_STIPEND)
                                             sortMenuExpanded = false
                                         }
                                     )

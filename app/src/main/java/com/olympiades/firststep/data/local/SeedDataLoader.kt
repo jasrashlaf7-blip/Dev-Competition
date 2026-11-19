@@ -113,6 +113,9 @@ class SeedDataLoader(
                     for (i in 0 until offersJson.length()) {
                         val obj = offersJson.getJSONObject(i)
                         val offerId = obj.getLong("id")
+                        val isPaid = obj.getBoolean("is_paid")
+                        val defaultStipend = if (isPaid) 20000 + ((offerId.toInt() % 5) * 5000) else 0
+                        val defaultStartDate = "2026-12-%02d".format(1 + (offerId.toInt() % 15))
                         offers.add(
                             OfferEntity(
                                 id = offerId,
@@ -124,7 +127,9 @@ class SeedDataLoader(
                                 descriptionFr = obj.getString("description_fr"),
                                 descriptionAr = obj.getString("description_ar"),
                                 durationMonths = obj.getInt("duration_months"),
-                                isPaid = obj.getBoolean("is_paid"),
+                                isPaid = isPaid,
+                                monthlyStipendDzd = obj.optInt("monthly_stipend_dzd", defaultStipend),
+                                startDate = obj.optString("start_date", defaultStartDate),
                                 status = OfferStatus.valueOf(obj.getString("status")),
                                 deadline = obj.getString("deadline"),
                                 createdAt = obj.getString("created_at")

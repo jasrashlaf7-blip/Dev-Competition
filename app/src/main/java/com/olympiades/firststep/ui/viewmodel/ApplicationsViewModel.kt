@@ -3,8 +3,10 @@ package com.olympiades.firststep.ui.viewmodel
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.olympiades.firststep.domain.export.CsvExporter
 import com.olympiades.firststep.domain.model.ApplicationStatus
 import com.olympiades.firststep.domain.model.ApplicationWithDetails
+import com.olympiades.firststep.domain.model.DateTimeHelper
 import com.olympiades.firststep.domain.usecase.UpdateApplicationStatusUseCase
 import com.olympiades.firststep.domain.validation.ApplicationStateMachine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,7 +29,8 @@ sealed interface ApplicationsUiState {
     data class Success(
         val applications: List<ApplicationWithDetails>,
         val selectedFilter: ApplicationStatus?,
-        val expandedApplicationId: Long?
+        val expandedApplicationId: Long?,
+        val unansweredOver7DaysCount: Int
     ) : ApplicationsUiState
     data class Error(val message: String) : ApplicationsUiState
 }
@@ -62,12 +65,16 @@ class ApplicationsViewModel(
         .flatMapLatest { filter ->
             combine(
                 updateApplicationStatusUseCase.observeApplications(filter),
+                updateApplicationStatusUseCase.observeApplications(null),
                 expandedAppIdFlow
-            ) { apps, expandedId ->
+            ) { filteredApps, allApps, expandedId ->
+                val today = DateTimeHelper.todayIso()
+                val overdueCount = allApps.count { it.isUnansweredOver7Days(today) }
                 ApplicationsUiState.Success(
-                    applications = apps,
+                    applications = filteredApps,
                     selectedFilter = filter,
-                    expandedApplicationId = expandedId
+                    expandedApplicationId = expandedId,
+                    unansweredOver7DaysCount = overdueCount
                 ) as ApplicationsUiState
             }
         }
@@ -77,6 +84,11 @@ class ApplicationsViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = ApplicationsUiState.Loading
         )
+
+    fun buildFilteredCsv(todayIso: String = DateTimeHelper.todayIso()): Pair<Int, String> {
+        val currentApps = (uiState.value as? ApplicationsUiState.Success)?.applications.orEmpty()
+        return currentApps.size to CsvExporter.buildApplicationsCsv(currentApps, todayIso)
+    }
 
     fun selectFilter(status: ApplicationStatus?) {
         statusFilterFlow.value = status

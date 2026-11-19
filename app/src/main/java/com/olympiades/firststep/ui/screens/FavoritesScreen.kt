@@ -27,11 +27,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -44,7 +47,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -85,6 +90,12 @@ fun FavoritesScreen(
             if (result == SnackbarResult.ActionPerformed) {
                 viewModel.undoRemove(removedOfferId)
             }
+        }
+    }
+
+    LaunchedEffect(strings) {
+        viewModel.noteSavedEvents.collect {
+            snackbarHostState.showSnackbar(strings.favoriteNoteSavedSnackbar)
         }
     }
 
@@ -177,6 +188,7 @@ fun FavoritesScreen(
                                         item = item,
                                         onClick = { onOfferClick(item.offer.id) },
                                         onRemoveClick = { viewModel.removeFavorite(item.offer.id) },
+                                        onSaveNote = { note -> viewModel.updatePersonalNote(item.offer.id, note) },
                                         modifier = Modifier.animateItem(
                                             fadeInSpec = tween(220),
                                             fadeOutSpec = tween(160),
@@ -198,6 +210,7 @@ private fun FavoriteItemCard(
     item: FavoriteOffer,
     onClick: () -> Unit,
     onRemoveClick: () -> Unit,
+    onSaveNote: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -208,6 +221,14 @@ private fun FavoriteItemCard(
     val cityName = if (isArabic) offer.location.cityAr else offer.location.cityFr
     val statusText = offer.applicationStatus?.let { strings.statusLabel(it) }
         ?: strings.notAppliedStatus
+    val stipendText = if (offer.isPaid && offer.monthlyStipendDzd > 0) {
+        " · ${strings.stipendPerMonth(offer.monthlyStipendDzd)}"
+    } else {
+        ""
+    }
+    var noteDraft by remember(item.offer.id, item.personalNote) {
+        mutableStateOf(item.personalNote)
+    }
 
     Card(
         modifier = modifier
@@ -245,7 +266,7 @@ private fun FavoriteItemCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${strings.durationMonths(offer.durationMonths)} · $statusText",
+                        text = "${strings.durationMonths(offer.durationMonths)}$stipendText · $statusText",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -254,6 +275,34 @@ private fun FavoriteItemCard(
                 Spacer(modifier = Modifier.size(8.dp))
 
                 ApplicationStatusBadge(status = offer.applicationStatus)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = noteDraft,
+                    onValueChange = { noteDraft = it },
+                    label = { Text(strings.favoriteNoteLabel) },
+                    placeholder = { Text(strings.favoriteNotePlaceholder) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("favorite_note_input_${offer.id}"),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                IconButton(
+                    onClick = { onSaveNote(noteDraft) },
+                    modifier = Modifier.testTag("favorite_note_save_${offer.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Save,
+                        contentDescription = strings.saveNoteAction,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Row(

@@ -36,6 +36,9 @@ class FavoritesViewModel(
     private val _removedOfferEvents = MutableSharedFlow<Long>()
     val removedOfferEvents: SharedFlow<Long> = _removedOfferEvents.asSharedFlow()
 
+    private val _noteSavedEvents = MutableSharedFlow<Unit>()
+    val noteSavedEvents: SharedFlow<Unit> = _noteSavedEvents.asSharedFlow()
+
     fun removeFavorite(offerId: Long) {
         viewModelScope.launch {
             val stillFavorite = toggleFavoriteUseCase(offerId)
@@ -48,6 +51,13 @@ class FavoritesViewModel(
     fun undoRemove(offerId: Long) {
         viewModelScope.launch {
             toggleFavoriteUseCase.restore(offerId)
+        }
+    }
+
+    fun updatePersonalNote(offerId: Long, note: String) {
+        viewModelScope.launch {
+            toggleFavoriteUseCase.updatePersonalNote(offerId, note)
+            _noteSavedEvents.emit(Unit)
         }
     }
 }

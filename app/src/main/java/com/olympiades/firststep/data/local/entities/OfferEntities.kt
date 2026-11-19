@@ -58,6 +58,10 @@ data class OfferEntity(
     val durationMonths: Int,
     @ColumnInfo(name = "is_paid")
     val isPaid: Boolean = false,
+    @ColumnInfo(name = "monthly_stipend_dzd")
+    val monthlyStipendDzd: Int = 0,
+    @ColumnInfo(name = "start_date")
+    val startDate: String = "",
     val status: OfferStatus = OfferStatus.OPEN,
     val deadline: String,
     @ColumnInfo(name = "created_at")

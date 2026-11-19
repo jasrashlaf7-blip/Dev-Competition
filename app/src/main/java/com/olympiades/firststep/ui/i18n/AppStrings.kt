@@ -156,7 +156,40 @@ data class AppStrings(
     val offerUpdatedSnackbar: String,
     val offerDeletedSnackbar: String,
     val offerFieldsError: String,
-    val viewDetailsAction: String
+    val viewDetailsAction: String,
+    // Module C: Stipend & Start Date
+    val stipendPerMonth: (Int) -> String,
+    val startDatePrefix: (String) -> String,
+    val filterMinStipend: String,
+    val sortHighestStipend: String,
+    val monthlyStipendLabel: String,
+    val startDateLabel: String,
+    // Module C: Rich Favorite Note
+    val favoriteNoteLabel: String,
+    val favoriteNotePlaceholder: String,
+    val saveNoteAction: String,
+    val favoriteNoteSavedSnackbar: String,
+    // Module C: >7-Day Alert & CSV Export
+    val unansweredAlertBanner: (Int) -> String,
+    val unansweredOver7DaysBadge: (Int) -> String,
+    val exportCsvCd: String,
+    val exportCsvEmptySnackbar: String,
+    val exportCsvSuccessSnackbar: (Int) -> String,
+    val exportCsvErrorSnackbar: String,
+    // Module C: Security PIN Lock
+    val securitySectionTitle: String,
+    val pinLockLabel: String,
+    val pinLockEnabledDesc: String,
+    val pinLockDisabledDesc: String,
+    val setupPinDialogTitle: String,
+    val enterPinLabel: String,
+    val pinFormatError: String,
+    val pinEnabledSnackbar: String,
+    val pinDisabledSnackbar: String,
+    val unlockAppTitle: String,
+    val unlockAppSubtitle: String,
+    val unlockButtonLabel: String,
+    val wrongPinError: String
 ) {
     fun statusLabel(status: ApplicationStatus): String = when (status) {
         ApplicationStatus.SUBMITTED -> statusSubmitted
@@ -319,7 +352,39 @@ val FrenchStrings = AppStrings(
     offerUpdatedSnackbar = "Offre mise à jour dans SQLite",
     offerDeletedSnackbar = "Offre supprimée de SQLite",
     offerFieldsError = "Veuillez renseigner le titre FR, la description FR et la date (AAAA-MM-JJ).",
-    viewDetailsAction = "Voir détails"
+    viewDetailsAction = "Voir détails",
+    stipendPerMonth = { amount -> "$amount DA/mois" },
+    startDatePrefix = { date -> "Début : $date" },
+    filterMinStipend = "≥ 25 000 DA",
+    sortHighestStipend = "Gratification max",
+    monthlyStipendLabel = "Gratification mensuelle (DA)",
+    startDateLabel = "Date de début (AAAA-MM-JJ)",
+    favoriteNoteLabel = "Note personnelle (SQLite)",
+    favoriteNotePlaceholder = "Ajouter un mémo pour ce favori...",
+    saveNoteAction = "Enregistrer",
+    favoriteNoteSavedSnackbar = "Note du favori enregistrée dans SQLite",
+    unansweredAlertBanner = { count ->
+        if (count <= 1) "$count candidature soumise sans réponse depuis plus de 7 jours."
+        else "$count candidatures soumises sans réponse depuis plus de 7 jours."
+    },
+    unansweredOver7DaysBadge = { days -> "Relance >7j ($days j)" },
+    exportCsvCd = "Exporter en CSV",
+    exportCsvEmptySnackbar = "Aucune candidature filtrée à exporter.",
+    exportCsvSuccessSnackbar = { count -> "$count candidature(s) exportée(s) en CSV." },
+    exportCsvErrorSnackbar = "Impossible de générer le fichier CSV.",
+    securitySectionTitle = "Sécurité locale",
+    pinLockLabel = "Verrouillage PIN (4 chiffres)",
+    pinLockEnabledDesc = "Actif : code demandé à l'ouverture (SHA-256 salé)",
+    pinLockDisabledDesc = "Désactivé : ouverture directe hors-ligne",
+    setupPinDialogTitle = "Définir un code PIN (4 chiffres)",
+    enterPinLabel = "Code PIN à 4 chiffres",
+    pinFormatError = "Veuillez saisir exactement 4 chiffres.",
+    pinEnabledSnackbar = "Verrouillage PIN activé",
+    pinDisabledSnackbar = "Verrouillage PIN désactivé",
+    unlockAppTitle = "Déverrouiller FIRSTSTEP",
+    unlockAppSubtitle = "Saisissez votre code PIN à 4 chiffres pour accéder à vos données locales.",
+    unlockButtonLabel = "Déverrouiller",
+    wrongPinError = "Code PIN incorrect"
 )
 
 val ArabicStrings = AppStrings(
@@ -462,7 +527,36 @@ val ArabicStrings = AppStrings(
     offerUpdatedSnackbar = "تم تحديث العرض في SQLite",
     offerDeletedSnackbar = "تم حذف العرض من SQLite",
     offerFieldsError = "يرجى إدخال العنوان والوصف وآخر أجل بصيغة YYYY-MM-DD.",
-    viewDetailsAction = "عرض التفاصيل"
+    viewDetailsAction = "عرض التفاصيل",
+    stipendPerMonth = { amount -> "$amount دج/شهر" },
+    startDatePrefix = { date -> "البداية: $date" },
+    filterMinStipend = "≥ 25,000 دج",
+    sortHighestStipend = "الأعلى منحة",
+    monthlyStipendLabel = "المنحة الشهرية (دج)",
+    startDateLabel = "تاريخ البداية (YYYY-MM-DD)",
+    favoriteNoteLabel = "ملاحظة شخصية (SQLite)",
+    favoriteNotePlaceholder = "أضف ملاحظة حول هذا العرض...",
+    saveNoteAction = "حفظ",
+    favoriteNoteSavedSnackbar = "تم حفظ الملاحظة في قاعدة البيانات",
+    unansweredAlertBanner = { count -> "يوجد $count ترشح(ات) مرسلة بدون رد منذ أكثر من 7 أيام." },
+    unansweredOver7DaysBadge = { days -> "متابعة >7أ ($days ي)" },
+    exportCsvCd = "تصدير CSV",
+    exportCsvEmptySnackbar = "لا توجد ترشحات مطابقة للتصدير.",
+    exportCsvSuccessSnackbar = { count -> "تم تصدير $count ترشح(ات) إلى ملف CSV." },
+    exportCsvErrorSnackbar = "تعذر إنشاء ملف CSV.",
+    securitySectionTitle = "الأمان المحلي",
+    pinLockLabel = "القفل برمز PIN (4 أرقام)",
+    pinLockEnabledDesc = "مفعّل: يُطلب الرمز عند التشغيل (SHA-256)",
+    pinLockDisabledDesc = "معطّل: دخول مباشر بدون إنترنت",
+    setupPinDialogTitle = "تعيين رمز PIN من 4 أرقام",
+    enterPinLabel = "رمز PIN (4 أرقام)",
+    pinFormatError = "يرجى إدخال 4 أرقام بالضبط.",
+    pinEnabledSnackbar = "تم تفعيل قفل PIN",
+    pinDisabledSnackbar = "تم تعطيل قفل PIN",
+    unlockAppTitle = "فتح FIRSTSTEP",
+    unlockAppSubtitle = "أدخل رمز PIN المكون من 4 أرقام للوصول إلى بياناتك المحلية.",
+    unlockButtonLabel = "فتح القفل",
+    wrongPinError = "رمز PIN غير صحيح"
 )
 
 fun stringsFor(language: AppLanguage): AppStrings = when (language) {

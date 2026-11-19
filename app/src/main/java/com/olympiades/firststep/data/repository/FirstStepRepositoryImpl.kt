@@ -57,14 +57,17 @@ class FirstStepRepositoryImpl(
     }
 
     override fun observeFilteredOffers(criteria: OfferFilterCriteria): Flow<List<Offer>> {
-        val searchTokens = tokenizeQuery(criteria.query)
+        val sanitizedQuery = sanitizeInputQuery(criteria.query)
+        val searchTokens = tokenizeQuery(sanitizedQuery)
         val todayIso = DateTimeHelper.todayIso()
+        val minStipend = criteria.minStipendDzd ?: 0
         val flow = when (criteria.sortOption) {
             OfferSortOption.NEWEST -> offerDao.getFilteredOffersOrderByNewest(
                 query = "",
                 domainId = criteria.domainId,
                 locationId = criteria.locationId,
                 paidOnly = criteria.paidOnly,
+                minStipendDzd = minStipend,
                 openOnly = criteria.openOnly,
                 todayIso = todayIso
             )
@@ -73,6 +76,16 @@ class FirstStepRepositoryImpl(
                 domainId = criteria.domainId,
                 locationId = criteria.locationId,
                 paidOnly = criteria.paidOnly,
+                minStipendDzd = minStipend,
+                openOnly = criteria.openOnly,
+                todayIso = todayIso
+            )
+            OfferSortOption.HIGHEST_STIPEND -> offerDao.getFilteredOffersOrderByStipend(
+                query = "",
+                domainId = criteria.domainId,
+                locationId = criteria.locationId,
+                paidOnly = criteria.paidOnly,
+                minStipendDzd = minStipend,
                 openOnly = criteria.openOnly,
                 todayIso = todayIso
             )
@@ -115,6 +128,8 @@ class FirstStepRepositoryImpl(
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int,
+        startDate: String,
         status: OfferStatus,
         deadline: String
     ): Result<Long> {
@@ -123,6 +138,7 @@ class FirstStepRepositoryImpl(
             val cleanTitleAr = titleAr.trim().ifEmpty { cleanTitleFr }
             val cleanDescFr = descriptionFr.trim()
             val cleanDescAr = descriptionAr.trim().ifEmpty { cleanDescFr }
+            val cleanStipend = if (isPaid) monthlyStipendDzd.coerceIn(0, 500_000) else 0
             offerDao.insertOffer(
                 OfferEntity(
                     companyId = companyId,
@@ -134,6 +150,8 @@ class FirstStepRepositoryImpl(
                     descriptionAr = cleanDescAr,
                     durationMonths = durationMonths.coerceIn(1, 24),
                     isPaid = isPaid,
+                    monthlyStipendDzd = cleanStipend,
+                    startDate = startDate.trim().ifEmpty { "2026-12-01" },
                     status = status,
                     deadline = deadline.trim(),
                     createdAt = DateTimeHelper.nowTimestamp()
@@ -153,6 +171,8 @@ class FirstStepRepositoryImpl(
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int,
+        startDate: String,
         status: OfferStatus,
         deadline: String
     ): Result<Unit> {
@@ -161,6 +181,7 @@ class FirstStepRepositoryImpl(
             val cleanTitleAr = titleAr.trim().ifEmpty { cleanTitleFr }
             val cleanDescFr = descriptionFr.trim()
             val cleanDescAr = descriptionAr.trim().ifEmpty { cleanDescFr }
+            val cleanStipend = if (isPaid) monthlyStipendDzd.coerceIn(0, 500_000) else 0
             offerDao.updateOffer(
                 offerId = offerId,
                 companyId = companyId,
@@ -172,6 +193,8 @@ class FirstStepRepositoryImpl(
                 descriptionAr = cleanDescAr,
                 durationMonths = durationMonths.coerceIn(1, 24),
                 isPaid = isPaid,
+                monthlyStipendDzd = cleanStipend,
+                startDate = startDate.trim().ifEmpty { "2026-12-01" },
                 status = status.name,
                 deadline = deadline.trim()
             )
@@ -196,25 +219,36 @@ class FirstStepRepositoryImpl(
             favoriteDao.deleteFavoriteByOfferId(offerId)
             false
         } else {
-            favoriteDao.insertFavorite(
-                FavoriteEntity(
-                    offerId = offerId,
-                    addedAt = DateTimeHelper.nowTimestamp()
-                )
-            )
+            favoriteDao.insertFavorite(buildFavoriteEntity(offerId))
             true
         }
     }
 
     override suspend fun restoreFavorite(offerId: Long) {
         if (favoriteDao.getFavoriteByOfferId(offerId) == null) {
-            favoriteDao.insertFavorite(
-                FavoriteEntity(
-                    offerId = offerId,
-                    addedAt = DateTimeHelper.nowTimestamp()
-                )
-            )
+            favoriteDao.insertFavorite(buildFavoriteEntity(offerId))
         }
+    }
+
+    override suspend fun updateFavoriteNote(offerId: Long, personalNote: String) {
+        favoriteDao.updateFavoriteNote(offerId, personalNote.trim().take(200))
+    }
+
+    private suspend fun buildFavoriteEntity(offerId: Long): FavoriteEntity {
+        val rel = offerDao.getOfferByIdOnce(offerId)
+        return FavoriteEntity(
+            offerId = offerId,
+            addedAt = DateTimeHelper.nowTimestamp(),
+            offerTitleFr = rel?.offer?.titleFr.orEmpty(),
+            offerTitleAr = rel?.offer?.titleAr.orEmpty(),
+            companyName = rel?.company?.name.orEmpty(),
+            cityFr = rel?.location?.cityFr.orEmpty(),
+            domainFr = rel?.domain?.nameFr.orEmpty(),
+            monthlyStipendDzd = rel?.offer?.monthlyStipendDzd ?: 0,
+            startDate = rel?.offer?.startDate.orEmpty(),
+            deadline = rel?.offer?.deadline.orEmpty(),
+            personalNote = ""
+        )
     }
 
     override fun observeApplications(statusFilter: ApplicationStatus?): Flow<List<ApplicationWithDetails>> =
@@ -260,7 +294,10 @@ class FirstStepRepositoryImpl(
                 coverLetter = coverLetter.trim(),
                 cvUri = cvUri.trim(),
                 currentStatus = ApplicationStatus.SUBMITTED,
-                appliedAt = timestamp
+                appliedAt = timestamp,
+                offerTitleSnapshot = offerWithRel.offer.titleFr,
+                companyNameSnapshot = offerWithRel.company.name,
+                monthlyStipendDzd = offerWithRel.offer.monthlyStipendDzd
             )
             applicationDao.submitApplicationWithHistory(
                 application = entity,
@@ -345,6 +382,14 @@ class FirstStepRepositoryImpl(
         preferencesDataStore.setThemeMode(themeMode)
     }
 
+    override suspend fun enablePinLock(pin: String) {
+        preferencesDataStore.enablePinLock(pin)
+    }
+
+    override suspend fun disablePinLock() {
+        preferencesDataStore.disablePinLock()
+    }
+
     override suspend fun saveLastFilters(criteria: OfferFilterCriteria) {
         preferencesDataStore.saveFilters(criteria)
     }
@@ -353,6 +398,12 @@ class FirstStepRepositoryImpl(
         private val TOKEN_SPLIT_REGEX = Regex("[\\s\\-_/.,;:'’\"()\\[\\]{}|\\\\]+")
         private val DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
         private val ARABIC_DIACRITICS_AND_TATWEEL_REGEX = Regex("[\\u0640\\u064B-\\u065F\\u0670]")
+
+        internal fun sanitizeInputQuery(raw: String): String {
+            return raw
+                .filter { ch -> !ch.isISOControl() }
+                .take(100)
+        }
 
         internal fun normalizeSearchText(input: String): String {
             if (input.isBlank()) return ""

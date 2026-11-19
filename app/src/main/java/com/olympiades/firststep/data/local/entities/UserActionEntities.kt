@@ -27,7 +27,24 @@ data class FavoriteEntity(
     @ColumnInfo(name = "offer_id")
     val offerId: Long,
     @ColumnInfo(name = "added_at")
-    val addedAt: String
+    val addedAt: String,
+    @ColumnInfo(name = "offer_title_fr")
+    val offerTitleFr: String = "",
+    @ColumnInfo(name = "offer_title_ar")
+    val offerTitleAr: String = "",
+    @ColumnInfo(name = "company_name")
+    val companyName: String = "",
+    @ColumnInfo(name = "city_fr")
+    val cityFr: String = "",
+    @ColumnInfo(name = "domain_fr")
+    val domainFr: String = "",
+    @ColumnInfo(name = "monthly_stipend_dzd")
+    val monthlyStipendDzd: Int = 0,
+    @ColumnInfo(name = "start_date")
+    val startDate: String = "",
+    val deadline: String = "",
+    @ColumnInfo(name = "personal_note")
+    val personalNote: String = ""
 )
 
 @Entity(
@@ -64,7 +81,13 @@ data class ApplicationEntity(
     @ColumnInfo(name = "current_status")
     val currentStatus: ApplicationStatus = ApplicationStatus.SUBMITTED,
     @ColumnInfo(name = "applied_at")
-    val appliedAt: String
+    val appliedAt: String,
+    @ColumnInfo(name = "offer_title_snapshot")
+    val offerTitleSnapshot: String = "",
+    @ColumnInfo(name = "company_name_snapshot")
+    val companyNameSnapshot: String = "",
+    @ColumnInfo(name = "monthly_stipend_dzd")
+    val monthlyStipendDzd: Int = 0
 )
 
 @Entity(

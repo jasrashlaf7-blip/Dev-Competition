@@ -127,6 +127,14 @@ class OffersViewModel(
         updateCriteria { it.copy(openOnly = !it.openOnly) }
     }
 
+    fun toggleMinStipendFilter(threshold: Int = 25_000) {
+        userHasInteracted = true
+        updateCriteria {
+            val next = if (it.minStipendDzd == threshold) null else threshold
+            it.copy(minStipendDzd = next)
+        }
+    }
+
     fun selectDomain(domainId: Long?) {
         userHasInteracted = true
         updateCriteria { it.copy(domainId = domainId) }
@@ -164,6 +172,8 @@ class OffersViewModel(
         descriptionAr: String,
         durationMonths: Int,
         isPaid: Boolean,
+        monthlyStipendDzd: Int = 0,
+        startDate: String = "2026-12-01",
         status: OfferStatus,
         deadline: String
     ) {
@@ -178,6 +188,8 @@ class OffersViewModel(
                 descriptionAr = descriptionAr,
                 durationMonths = durationMonths,
                 isPaid = isPaid,
+                monthlyStipendDzd = if (isPaid) monthlyStipendDzd else 0,
+                startDate = startDate,
                 status = status,
                 deadline = deadline
             )

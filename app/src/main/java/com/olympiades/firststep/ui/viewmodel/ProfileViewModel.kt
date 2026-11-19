@@ -35,7 +35,8 @@ data class ProfileEditDraft(
 data class ProfileUiState(
     val profile: StudentProfile? = null,
     val language: AppLanguage = AppLanguage.FR,
-    val themeMode: AppThemeMode = AppThemeMode.LIGHT
+    val themeMode: AppThemeMode = AppThemeMode.LIGHT,
+    val pinLockEnabled: Boolean = false
 )
 
 class ProfileViewModel(
@@ -56,7 +57,8 @@ class ProfileViewModel(
         ProfileUiState(
             profile = profile,
             language = prefs.language,
-            themeMode = prefs.themeMode
+            themeMode = prefs.themeMode,
+            pinLockEnabled = prefs.pinLockEnabled
         )
     }.stateIn(
         scope = viewModelScope,
@@ -148,6 +150,18 @@ class ProfileViewModel(
     fun setThemeMode(themeMode: AppThemeMode) {
         viewModelScope.launch {
             repository.setThemeMode(themeMode)
+        }
+    }
+
+    fun enablePinLock(pin: String) {
+        viewModelScope.launch {
+            repository.enablePinLock(pin)
+        }
+    }
+
+    fun disablePinLock() {
+        viewModelScope.launch {
+            repository.disablePinLock()
         }
     }
 }

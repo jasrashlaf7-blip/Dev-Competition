@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.LocationOn
@@ -125,7 +126,7 @@ fun OfferDetailScreen(
             domains = successState.domains,
             locations = successState.locations,
             onDismiss = { showEditOfferDialog = false },
-            onSave = { companyId, domainId, locationId, titleFr, titleAr, descFr, descAr, months, isPaid, status, deadline ->
+            onSave = { companyId, domainId, locationId, titleFr, titleAr, descFr, descAr, months, isPaid, stipend, startDate, status, deadline ->
                 viewModel.updateOffer(
                     companyId = companyId,
                     domainId = domainId,
@@ -136,6 +137,8 @@ fun OfferDetailScreen(
                     descriptionAr = descAr,
                     durationMonths = months,
                     isPaid = isPaid,
+                    monthlyStipendDzd = stipend,
+                    startDate = startDate,
                     status = status,
                     deadline = deadline
                 )
@@ -373,7 +376,15 @@ fun OfferDetailScreen(
                                 color = Color(0xFF0284C7)
                             )
                             StatusBadge(
-                                text = if (offer.isPaid) strings.paidBadge else strings.unpaidBadge,
+                                text = if (offer.isPaid) {
+                                    if (offer.monthlyStipendDzd > 0) {
+                                        strings.stipendPerMonth(offer.monthlyStipendDzd)
+                                    } else {
+                                        strings.paidBadge
+                                    }
+                                } else {
+                                    strings.unpaidBadge
+                                },
                                 color = if (offer.isPaid) FirstStepSecondary else Color(0xFF64748B)
                             )
                             if (isClosed) {
@@ -462,6 +473,12 @@ fun OfferDetailScreen(
                                         icon = Icons.Outlined.WorkOutline,
                                         text = strings.workModeOnsite,
                                         modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (offer.startDate.isNotBlank()) {
+                                    MetaInfoRow(
+                                        icon = Icons.Outlined.EventAvailable,
+                                        text = strings.startDatePrefix(DateTimeHelper.formatShortDate(offer.startDate))
                                     )
                                 }
                                 MetaInfoRow(

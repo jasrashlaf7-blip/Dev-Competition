@@ -54,6 +54,8 @@ data class Offer(
     val descriptionAr: String,
     val durationMonths: Int,
     val isPaid: Boolean,
+    val monthlyStipendDzd: Int = 0,
+    val startDate: String = "",
     val status: OfferStatus,
     val deadline: String,
     val createdAt: String,
@@ -74,6 +76,7 @@ data class Offer(
 data class FavoriteOffer(
     val favoriteId: Long,
     val addedAt: String,
+    val personalNote: String = "",
     val offer: Offer
 )
 
@@ -98,16 +101,29 @@ data class ApplicationWithDetails(
     val currentStatus: ApplicationStatus,
     val appliedAt: String,
     val history: List<StatusHistoryItem>
-)
+) {
+    fun daysSinceApplied(todayIso: String): Int =
+        DateTimeHelper.daysBetween(appliedAt, todayIso).coerceAtLeast(0)
+
+    fun isUnansweredOver7Days(todayIso: String): Boolean =
+        currentStatus == ApplicationStatus.SUBMITTED &&
+            DateTimeHelper.isOlderThanDays(appliedAt, todayIso, 7)
+}
 
 data class OfferFilterCriteria(
     val query: String = "",
     val paidOnly: Boolean = false,
     val openOnly: Boolean = false,
+    val minStipendDzd: Int? = null,
     val domainId: Long? = null,
     val locationId: Long? = null,
     val sortOption: OfferSortOption = OfferSortOption.NEWEST
 ) {
     val hasActiveFilters: Boolean
-        get() = query.isNotBlank() || paidOnly || openOnly || domainId != null || locationId != null
+        get() = query.isNotBlank() ||
+            paidOnly ||
+            openOnly ||
+            (minStipendDzd != null && minStipendDzd > 0) ||
+            domainId != null ||
+            locationId != null
 }

@@ -66,6 +66,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.olympiades.firststep.FirstStepContainer
 import com.olympiades.firststep.domain.model.AppLanguage
+import com.olympiades.firststep.ui.components.PinLockScreen
 import com.olympiades.firststep.ui.i18n.LocalAppStrings
 import com.olympiades.firststep.ui.i18n.stringsFor
 import com.olympiades.firststep.ui.screens.ApplicationFormScreen
@@ -112,6 +113,8 @@ fun FirstStepAppRoot(container: FirstStepContainer) {
     val appPrefsViewModel: AppPreferencesViewModel = viewModel(factory = factory)
     val prefs by appPrefsViewModel.preferences.collectAsStateWithLifecycle()
     val favoriteCount by appPrefsViewModel.favoriteCount.collectAsStateWithLifecycle()
+    val unansweredOver7DaysCount by appPrefsViewModel.unansweredOver7DaysCount.collectAsStateWithLifecycle()
+    val isAppLocked by appPrefsViewModel.isAppLocked.collectAsStateWithLifecycle()
 
     val layoutDirection = if (prefs.language == AppLanguage.AR) {
         LayoutDirection.Rtl
@@ -128,10 +131,15 @@ fun FirstStepAppRoot(container: FirstStepContainer) {
             LocalLayoutDirection provides layoutDirection,
             LocalAppStrings provides strings
         ) {
-            FirstStepNavScaffold(
-                container = container,
-                favoriteCount = favoriteCount
-            )
+            if (isAppLocked) {
+                PinLockScreen(onVerifyPin = appPrefsViewModel::verifyAndUnlock)
+            } else {
+                FirstStepNavScaffold(
+                    container = container,
+                    favoriteCount = favoriteCount,
+                    unansweredOver7DaysCount = unansweredOver7DaysCount
+                )
+            }
         }
     }
 }
@@ -139,7 +147,8 @@ fun FirstStepAppRoot(container: FirstStepContainer) {
 @Composable
 private fun FirstStepNavScaffold(
     container: FirstStepContainer,
-    favoriteCount: Int
+    favoriteCount: Int,
+    unansweredOver7DaysCount: Int
 ) {
     val strings = LocalAppStrings.current
     val navController = rememberNavController()
@@ -177,6 +186,7 @@ private fun FirstStepNavScaffold(
             label = strings.tabApplications,
             selectedIcon = Icons.AutoMirrored.Filled.Assignment,
             unselectedIcon = Icons.AutoMirrored.Outlined.Assignment,
+            badgeCount = unansweredOver7DaysCount,
             testTag = "nav_tab_applications"
         ),
         BottomNavTab(

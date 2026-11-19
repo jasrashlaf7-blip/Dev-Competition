@@ -25,6 +25,9 @@ interface FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertFavorite(favorite: FavoriteEntity): Long
 
+    @Query("UPDATE favorites SET personal_note = :personalNote WHERE offer_id = :offerId")
+    suspend fun updateFavoriteNote(offerId: Long, personalNote: String)
+
     @Query("DELETE FROM favorites WHERE offer_id = :offerId")
     suspend fun deleteFavoriteByOfferId(offerId: Long)
 }

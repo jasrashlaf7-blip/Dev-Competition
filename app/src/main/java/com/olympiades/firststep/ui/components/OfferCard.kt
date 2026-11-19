@@ -244,6 +244,15 @@ fun OfferCard(
                     )
                 }
 
+                if (offer.startDate.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = strings.startDatePrefix(DateTimeHelper.formatShortDate(offer.startDate)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 FlowRow(
@@ -251,8 +260,13 @@ fun OfferCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (offer.isPaid) {
+                        val paidText = if (offer.monthlyStipendDzd > 0) {
+                            strings.stipendPerMonth(offer.monthlyStipendDzd)
+                        } else {
+                            strings.paidBadge
+                        }
                         StatusBadge(
-                            text = strings.paidBadge,
+                            text = paidText,
                             color = FirstStepSecondary
                         )
                     } else {

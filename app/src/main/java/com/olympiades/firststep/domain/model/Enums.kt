@@ -19,7 +19,8 @@ enum class ApplicationStatus {
 
 enum class OfferSortOption {
     NEWEST,
-    CLOSEST_DEADLINE
+    CLOSEST_DEADLINE,
+    HIGHEST_STIPEND
 }
 
 enum class AppLanguage(val code: String) {
