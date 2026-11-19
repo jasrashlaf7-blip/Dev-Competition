@@ -1,5 +1,11 @@
 package com.olympiades.firststep.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,9 +37,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,9 +88,35 @@ fun OfferCard(
         else -> FirstStepPrimary
     }
 
+    val heartScale = remember { Animatable(1f) }
+    var previousFavorite by remember { mutableStateOf(offer.isFavorite) }
+    LaunchedEffect(offer.isFavorite) {
+        if (offer.isFavorite != previousFavorite) {
+            previousFavorite = offer.isFavorite
+            heartScale.snapTo(if (offer.isFavorite) 1.3f else 0.85f)
+            heartScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+    }
+    val heartTint by animateColorAsState(
+        targetValue = if (offer.isFavorite) {
+            FavoriteHeartColor
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(180),
+        label = "offer_heart_tint"
+    )
+
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
             .clickable(onClick = onClick)
             .testTag("offer_card_${offer.id}"),
         shape = RoundedCornerShape(12.dp),
@@ -151,10 +189,10 @@ fun OfferCard(
                             } else {
                                 strings.addToFavoritesCd
                             },
-                            tint = if (offer.isFavorite) {
-                                FavoriteHeartColor
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = heartTint,
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = heartScale.value
+                                scaleY = heartScale.value
                             }
                         )
                     }

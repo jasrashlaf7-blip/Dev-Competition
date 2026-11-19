@@ -1,5 +1,15 @@
 package com.olympiades.firststep.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -152,7 +162,11 @@ fun OffersScreen(
                             )
                         },
                         trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
+                            AnimatedVisibility(
+                                visible = searchQuery.isNotEmpty(),
+                                enter = scaleIn(tween(150)) + fadeIn(tween(150)),
+                                exit = scaleOut(tween(150)) + fadeOut(tween(150))
+                            ) {
                                 IconButton(
                                     onClick = { viewModel.updateQuery("") },
                                     modifier = Modifier.testTag("clear_search_button")
@@ -287,18 +301,30 @@ fun OffersScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = strings.resultsCount(state.offers.size),
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("offers_results_count")
-                        )
+                        AnimatedContent(
+                            targetState = state.offers.size,
+                            transitionSpec = {
+                                fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                            },
+                            label = "results_count_anim"
+                        ) { count ->
+                            Text(
+                                text = strings.resultsCount(count),
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("offers_results_count")
+                            )
+                        }
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            if (criteria.hasActiveFilters) {
+                            AnimatedVisibility(
+                                visible = criteria.hasActiveFilters,
+                                enter = scaleIn(tween(160)) + fadeIn(tween(160)),
+                                exit = scaleOut(tween(140)) + fadeOut(tween(140))
+                            ) {
                                 TextButton(
                                     onClick = viewModel::resetAllFilters,
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -361,66 +387,85 @@ fun OffersScreen(
                     }
 
                     // Offers list or empty state
-                    if (state.offers.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            EmptyStateView(
-                                icon = Icons.Outlined.SearchOff,
-                                title = strings.noResultsTitle,
-                                subtitle = strings.noResultsSubtitle,
-                                actionLabel = if (criteria.hasActiveFilters) strings.resetFilters else null,
-                                onAction = if (criteria.hasActiveFilters) viewModel::resetAllFilters else null
-                            )
-                        }
-                    } else {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            val useTwoColumns = maxWidth >= 600.dp
-                            if (useTwoColumns) {
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(2),
-                                    contentPadding = PaddingValues(
-                                        start = 16.dp,
-                                        end = 16.dp,
-                                        top = 4.dp,
-                                        bottom = 16.dp
-                                    ),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    items(state.offers, key = { it.id }) { offer ->
-                                        OfferCard(
-                                            offer = offer,
-                                            todayIso = todayIso,
-                                            onClick = { onOfferClick(offer.id) },
-                                            onFavoriteClick = { viewModel.toggleFavorite(offer.id) }
-                                        )
+                    AnimatedContent(
+                        targetState = state.offers.isEmpty(),
+                        transitionSpec = {
+                            fadeIn(tween(200)) togetherWith fadeOut(tween(150))
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        label = "offers_list_or_empty"
+                    ) { isEmpty ->
+                        if (isEmpty) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyStateView(
+                                    icon = Icons.Outlined.SearchOff,
+                                    title = strings.noResultsTitle,
+                                    subtitle = strings.noResultsSubtitle,
+                                    actionLabel = if (criteria.hasActiveFilters) strings.resetFilters else null,
+                                    onAction = if (criteria.hasActiveFilters) viewModel::resetAllFilters else null
+                                )
+                            }
+                        } else {
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val useTwoColumns = maxWidth >= 600.dp
+                                if (useTwoColumns) {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(2),
+                                        contentPadding = PaddingValues(
+                                            start = 16.dp,
+                                            end = 16.dp,
+                                            top = 4.dp,
+                                            bottom = 16.dp
+                                        ),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(state.offers, key = { it.id }) { offer ->
+                                            OfferCard(
+                                                offer = offer,
+                                                todayIso = todayIso,
+                                                onClick = { onOfferClick(offer.id) },
+                                                onFavoriteClick = { viewModel.toggleFavorite(offer.id) },
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = tween(220),
+                                                    fadeOutSpec = tween(160),
+                                                    placementSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                                )
+                                            )
+                                        }
                                     }
-                                }
-                            } else {
-                                LazyColumn(
-                                    contentPadding = PaddingValues(
-                                        start = 16.dp,
-                                        end = 16.dp,
-                                        top = 4.dp,
-                                        bottom = 16.dp
-                                    ),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .widthIn(max = 600.dp)
-                                ) {
-                                    items(state.offers, key = { it.id }) { offer ->
-                                        OfferCard(
-                                            offer = offer,
-                                            todayIso = todayIso,
-                                            onClick = { onOfferClick(offer.id) },
-                                            onFavoriteClick = { viewModel.toggleFavorite(offer.id) }
-                                        )
+                                } else {
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(
+                                            start = 16.dp,
+                                            end = 16.dp,
+                                            top = 4.dp,
+                                            bottom = 16.dp
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .widthIn(max = 600.dp)
+                                    ) {
+                                        items(state.offers, key = { it.id }) { offer ->
+                                            OfferCard(
+                                                offer = offer,
+                                                todayIso = todayIso,
+                                                onClick = { onOfferClick(offer.id) },
+                                                onFavoriteClick = { viewModel.toggleFavorite(offer.id) },
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = tween(220),
+                                                    fadeOutSpec = tween(160),
+                                                    placementSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                                )
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -1,5 +1,18 @@
 package com.olympiades.firststep.ui.navigation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -7,11 +20,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.WorkOutline
@@ -34,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -161,8 +175,8 @@ private fun FirstStepNavScaffold(
         BottomNavTab(
             route = FirstStepRoutes.APPLICATIONS,
             label = strings.tabApplications,
-            selectedIcon = Icons.Filled.Assignment,
-            unselectedIcon = Icons.Outlined.Assignment,
+            selectedIcon = Icons.AutoMirrored.Filled.Assignment,
+            unselectedIcon = Icons.AutoMirrored.Outlined.Assignment,
             testTag = "nav_tab_applications"
         ),
         BottomNavTab(
@@ -264,7 +278,20 @@ private fun FirstStepNavScaffold(
                 Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                     NavHost(
                         navController = navController,
-                        startDestination = FirstStepRoutes.OFFERS
+                        startDestination = FirstStepRoutes.OFFERS,
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(220)) +
+                                scaleIn(initialScale = 0.98f, animationSpec = tween(220))
+                        },
+                        exitTransition = {
+                            fadeOut(animationSpec = tween(180))
+                        },
+                        popEnterTransition = {
+                            fadeIn(animationSpec = tween(220))
+                        },
+                        popExitTransition = {
+                            fadeOut(animationSpec = tween(180))
+                        }
                     ) {
                         composable(FirstStepRoutes.OFFERS) {
                             OffersScreen(
@@ -301,7 +328,25 @@ private fun FirstStepNavScaffold(
                             route = FirstStepRoutes.OFFER_DETAIL,
                             arguments = listOf(
                                 navArgument("offerId") { type = NavType.LongType }
-                            )
+                            ),
+                            enterTransition = {
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 5 },
+                                    animationSpec = tween(240)
+                                ) + fadeIn(animationSpec = tween(240))
+                            },
+                            exitTransition = {
+                                fadeOut(animationSpec = tween(180))
+                            },
+                            popEnterTransition = {
+                                fadeIn(animationSpec = tween(220))
+                            },
+                            popExitTransition = {
+                                slideOutHorizontally(
+                                    targetOffsetX = { it / 5 },
+                                    animationSpec = tween(220)
+                                ) + fadeOut(animationSpec = tween(200))
+                            }
                         ) { backStackEntry ->
                             val offerId = backStackEntry.arguments?.getLong("offerId") ?: return@composable
                             val detailFactory = remember(container, offerId) {
@@ -321,7 +366,25 @@ private fun FirstStepNavScaffold(
                             route = FirstStepRoutes.APPLICATION_FORM,
                             arguments = listOf(
                                 navArgument("offerId") { type = NavType.LongType }
-                            )
+                            ),
+                            enterTransition = {
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 5 },
+                                    animationSpec = tween(240)
+                                ) + fadeIn(animationSpec = tween(240))
+                            },
+                            exitTransition = {
+                                fadeOut(animationSpec = tween(180))
+                            },
+                            popEnterTransition = {
+                                fadeIn(animationSpec = tween(220))
+                            },
+                            popExitTransition = {
+                                slideOutHorizontally(
+                                    targetOffsetX = { it / 5 },
+                                    animationSpec = tween(220)
+                                ) + fadeOut(animationSpec = tween(200))
+                            }
                         ) { backStackEntry ->
                             val offerId = backStackEntry.arguments?.getLong("offerId") ?: return@composable
                             val formFactory = remember(container, offerId) {
@@ -360,17 +423,48 @@ private fun TabIconWithBadge(
     selected: Boolean
 ) {
     val iconVector = if (selected) tab.selectedIcon else tab.unselectedIcon
-    if (tab.badgeCount > 0) {
-        BadgedBox(
-            badge = {
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.12f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "tab_icon_scale"
+    )
+    BadgedBox(
+        badge = {
+            AnimatedVisibility(
+                visible = tab.badgeCount > 0,
+                enter = scaleIn(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeIn(tween(150)),
+                exit = scaleOut(tween(150)) + fadeOut(tween(150))
+            ) {
                 Badge {
-                    Text(text = tab.badgeCount.toString())
+                    AnimatedContent(
+                        targetState = tab.badgeCount,
+                        transitionSpec = {
+                            (fadeIn(tween(150)) + scaleIn(initialScale = 0.8f, animationSpec = tween(150)))
+                                .togetherWith(fadeOut(tween(100)))
+                        },
+                        label = "tab_badge_count"
+                    ) { count ->
+                        Text(text = count.toString())
+                    }
                 }
             }
-        ) {
-            Icon(imageVector = iconVector, contentDescription = tab.label)
         }
-    } else {
-        Icon(imageVector = iconVector, contentDescription = tab.label)
+    ) {
+        Icon(
+            imageVector = iconVector,
+            contentDescription = tab.label,
+            modifier = Modifier.graphicsLayer {
+                scaleX = iconScale
+                scaleY = iconScale
+            }
+        )
     }
 }

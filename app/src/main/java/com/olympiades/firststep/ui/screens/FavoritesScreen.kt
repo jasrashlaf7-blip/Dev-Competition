@@ -1,5 +1,12 @@
 package com.olympiades.firststep.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,50 +127,63 @@ fun FavoritesScreen(
             }
 
             is FavoritesUiState.Success -> {
-                if (state.favorites.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        EmptyStateView(
-                            icon = Icons.Outlined.FavoriteBorder,
-                            title = strings.favoritesEmptyTitle,
-                            subtitle = strings.favoritesEmptySubtitle
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                AnimatedContent(
+                    targetState = state.favorites.isEmpty(),
+                    transitionSpec = {
+                        fadeIn(tween(200)) togetherWith fadeOut(tween(150))
+                    },
+                    label = "favorites_empty_or_list"
+                ) { isEmpty ->
+                    if (isEmpty) {
+                        Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .widthIn(max = 680.dp)
+                                .padding(innerPadding),
+                            contentAlignment = Alignment.Center
                         ) {
-                            item {
-                                Text(
-                                    text = strings.favoritesCounter(state.favorites.size),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.testTag("favorites_counter")
-                                )
-                            }
+                            EmptyStateView(
+                                icon = Icons.Outlined.FavoriteBorder,
+                                title = strings.favoritesEmptyTitle,
+                                subtitle = strings.favoritesEmptySubtitle
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            LazyColumn(
+                                contentPadding = PaddingValues(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .widthIn(max = 680.dp)
+                            ) {
+                                item(key = "favorites_counter_header") {
+                                    Text(
+                                        text = strings.favoritesCounter(state.favorites.size),
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("favorites_counter")
+                                    )
+                                }
 
-                            items(state.favorites, key = { it.offer.id }) { item ->
-                                FavoriteItemCard(
-                                    item = item,
-                                    onClick = { onOfferClick(item.offer.id) },
-                                    onRemoveClick = { viewModel.removeFavorite(item.offer.id) }
-                                )
+                                items(state.favorites, key = { it.offer.id }) { item ->
+                                    FavoriteItemCard(
+                                        item = item,
+                                        onClick = { onOfferClick(item.offer.id) },
+                                        onRemoveClick = { viewModel.removeFavorite(item.offer.id) },
+                                        modifier = Modifier.animateItem(
+                                            fadeInSpec = tween(220),
+                                            fadeOutSpec = tween(160),
+                                            placementSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -177,7 +197,8 @@ fun FavoritesScreen(
 private fun FavoriteItemCard(
     item: FavoriteOffer,
     onClick: () -> Unit,
-    onRemoveClick: () -> Unit
+    onRemoveClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
     val isArabic = strings.language == AppLanguage.AR
@@ -189,7 +210,7 @@ private fun FavoriteItemCard(
         ?: strings.notAppliedStatus
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .testTag("favorite_card_${offer.id}"),

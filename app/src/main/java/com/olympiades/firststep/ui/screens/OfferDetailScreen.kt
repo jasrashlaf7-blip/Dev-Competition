@@ -1,5 +1,16 @@
 package com.olympiades.firststep.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -165,6 +177,26 @@ fun OfferDetailScreen(
                 },
                 actions = {
                     if (uiState is OfferDetailUiState.Success) {
+                        val detailHeartScale = remember { Animatable(1f) }
+                        var prevDetailFavorite by remember { mutableStateOf(isFavorite) }
+                        LaunchedEffect(isFavorite) {
+                            if (isFavorite != prevDetailFavorite) {
+                                prevDetailFavorite = isFavorite
+                                detailHeartScale.snapTo(if (isFavorite) 1.32f else 0.85f)
+                                detailHeartScale.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                )
+                            }
+                        }
+                        val detailHeartTint by animateColorAsState(
+                            targetValue = if (isFavorite) FavoriteHeartColor else Color.White,
+                            animationSpec = tween(180),
+                            label = "detail_heart_tint"
+                        )
                         IconButton(
                             onClick = { showEditOfferDialog = true },
                             modifier = Modifier
@@ -194,7 +226,11 @@ fun OfferDetailScreen(
                                 } else {
                                     strings.addToFavoritesCd
                                 },
-                                tint = if (isFavorite) FavoriteHeartColor else Color.White
+                                tint = detailHeartTint,
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = detailHeartScale.value
+                                    scaleY = detailHeartScale.value
+                                }
                             )
                         }
                     }
@@ -300,6 +336,7 @@ fun OfferDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .widthIn(max = 680.dp)
+                            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                             .verticalScroll(rememberScrollState())
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -356,27 +393,37 @@ fun OfferDetailScreen(
                         }
 
                         // Status notice banners
-                        if (isClosed) {
-                            NoticeBanner(
-                                icon = Icons.Outlined.EventBusy,
-                                text = strings.closedOfferBanner,
-                                containerColor = OfferClosedColor.copy(alpha = 0.12f),
-                                contentColor = OfferClosedColor
-                            )
-                        } else if (isExpired) {
-                            NoticeBanner(
-                                icon = Icons.Outlined.EventBusy,
-                                text = strings.expiredOfferBanner,
-                                containerColor = OfferClosedColor.copy(alpha = 0.12f),
-                                contentColor = OfferClosedColor
-                            )
-                        } else if (offer.applicationReference != null) {
-                            NoticeBanner(
-                                icon = Icons.Outlined.CheckCircle,
-                                text = strings.alreadyAppliedBanner(offer.applicationReference),
-                                containerColor = FirstStepSecondary.copy(alpha = 0.12f),
-                                contentColor = FirstStepSecondary
-                            )
+                        AnimatedVisibility(
+                            visible = isClosed || isExpired || offer.applicationReference != null,
+                            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            when {
+                                isClosed -> {
+                                    NoticeBanner(
+                                        icon = Icons.Outlined.EventBusy,
+                                        text = strings.closedOfferBanner,
+                                        containerColor = OfferClosedColor.copy(alpha = 0.12f),
+                                        contentColor = OfferClosedColor
+                                    )
+                                }
+                                isExpired -> {
+                                    NoticeBanner(
+                                        icon = Icons.Outlined.EventBusy,
+                                        text = strings.expiredOfferBanner,
+                                        containerColor = OfferClosedColor.copy(alpha = 0.12f),
+                                        contentColor = OfferClosedColor
+                                    )
+                                }
+                                offer.applicationReference != null -> {
+                                    NoticeBanner(
+                                        icon = Icons.Outlined.CheckCircle,
+                                        text = strings.alreadyAppliedBanner(offer.applicationReference),
+                                        containerColor = FirstStepSecondary.copy(alpha = 0.12f),
+                                        contentColor = FirstStepSecondary
+                                    )
+                                }
+                            }
                         }
 
                         // Description card

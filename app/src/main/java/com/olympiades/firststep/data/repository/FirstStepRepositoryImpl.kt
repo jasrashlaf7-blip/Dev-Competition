@@ -82,7 +82,13 @@ class FirstStepRepositoryImpl(
             if (searchTokens.isEmpty()) {
                 domainOffers
             } else {
-                domainOffers.filter { offer -> offer.matchesAllSearchTokens(searchTokens) }
+                domainOffers
+                    .mapNotNull { offer ->
+                        val tier = offer.searchMatchTier(searchTokens)
+                        if (tier >= 0) offer to tier else null
+                    }
+                    .sortedWith(compareBy { it.second })
+                    .map { it.first }
             }
         }
     }
@@ -344,43 +350,85 @@ class FirstStepRepositoryImpl(
     }
 
     companion object {
-        private val WHITESPACE_REGEX = Regex("\\s+")
+        private val TOKEN_SPLIT_REGEX = Regex("[\\s\\-_/.,;:'’\"()\\[\\]{}|\\\\]+")
         private val DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+        private val ARABIC_DIACRITICS_AND_TATWEEL_REGEX = Regex("[\\u0640\\u064B-\\u065F\\u0670]")
 
-        private fun normalizeSearchText(input: String): String {
-            val decomposed = Normalizer.normalize(input, Normalizer.Form.NFD)
-            return DIACRITICS_REGEX.replace(decomposed, "").lowercase(Locale.ROOT)
+        internal fun normalizeSearchText(input: String): String {
+            if (input.isBlank()) return ""
+            val preNormalized = input
+                .replace("œ", "oe")
+                .replace("Œ", "oe")
+                .replace("æ", "ae")
+                .replace("Æ", "ae")
+            val decomposed = Normalizer.normalize(preNormalized, Normalizer.Form.NFD)
+            val withoutMarks = DIACRITICS_REGEX.replace(decomposed, "")
+            val arabicCleaned = ARABIC_DIACRITICS_AND_TATWEEL_REGEX.replace(withoutMarks, "")
+                .replace('أ', 'ا')
+                .replace('إ', 'ا')
+                .replace('آ', 'ا')
+                .replace('ٱ', 'ا')
+                .replace('ة', 'ه')
+                .replace('ى', 'ي')
+                .replace('ؤ', 'و')
+                .replace('ئ', 'ي')
+            return arabicCleaned.lowercase(Locale.ROOT)
         }
 
-        private fun tokenizeQuery(query: String): List<String> {
+        internal fun tokenizeQuery(query: String): List<String> {
             val normalized = normalizeSearchText(query).trim()
             if (normalized.isEmpty()) return emptyList()
-            return normalized.split(WHITESPACE_REGEX).filter { it.isNotBlank() }
+            return normalized.split(TOKEN_SPLIT_REGEX).filter { it.isNotBlank() }
         }
 
-        private fun Offer.matchesAllSearchTokens(tokens: List<String>): Boolean {
-            val searchableText = normalizeSearchText(
-                buildString {
-                    append(titleFr).append(' ')
-                    append(titleAr).append(' ')
-                    append(descriptionFr).append(' ')
-                    append(descriptionAr).append(' ')
-                    append(company.name).append(' ')
-                    append(company.sectorFr).append(' ')
-                    append(company.sectorAr).append(' ')
-                    append(domain.nameFr).append(' ')
-                    append(domain.nameAr).append(' ')
-                    append(location.cityFr).append(' ')
-                    append(location.cityAr).append(' ')
-                    append(location.regionFr).append(' ')
-                    append(location.regionAr).append(' ')
-                    skills.forEach { skill ->
-                        append(skill.nameFr).append(' ')
-                        append(skill.nameAr).append(' ')
-                    }
+        private fun normalizeIndexedField(raw: String): Pair<String, String> {
+            val spaced = TOKEN_SPLIT_REGEX.replace(normalizeSearchText(raw), " ")
+            val compact = spaced.replace(" ", "")
+            return spaced to compact
+        }
+
+        private fun Pair<String, String>.containsToken(token: String): Boolean {
+            return first.contains(token) || second.contains(token)
+        }
+
+        /**
+         * Returns:
+         * - `0` if every search token matches in the offer title (FR or AR), in any word position
+         * - `1` if at least one token matches in the title and all remaining tokens match across metadata/description
+         * - `2` if all tokens match across company, domain, city, region, skills, or description
+         * - `-1` if any token fails to match
+         */
+        private fun Offer.searchMatchTier(tokens: List<String>): Int {
+            val titleIndexed = normalizeIndexedField("$titleFr $titleAr")
+            val fullRaw = buildString {
+                append(titleFr).append(' ')
+                append(titleAr).append(' ')
+                append(descriptionFr).append(' ')
+                append(descriptionAr).append(' ')
+                append(company.name).append(' ')
+                append(company.sectorFr).append(' ')
+                append(company.sectorAr).append(' ')
+                append(domain.nameFr).append(' ')
+                append(domain.nameAr).append(' ')
+                append(location.cityFr).append(' ')
+                append(location.cityAr).append(' ')
+                append(location.regionFr).append(' ')
+                append(location.regionAr).append(' ')
+                skills.forEach { skill ->
+                    append(skill.nameFr).append(' ')
+                    append(skill.nameAr).append(' ')
                 }
-            )
-            return tokens.all { token -> searchableText.contains(token) }
+            }
+            val fullIndexed = normalizeIndexedField(fullRaw)
+
+            if (!tokens.all { token -> fullIndexed.containsToken(token) }) {
+                return -1
+            }
+            val allInTitle = tokens.all { token -> titleIndexed.containsToken(token) }
+            if (allInTitle) return 0
+
+            val anyInTitle = tokens.any { token -> titleIndexed.containsToken(token) }
+            return if (anyInTitle) 1 else 2
         }
     }
 }

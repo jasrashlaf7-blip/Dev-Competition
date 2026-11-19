@@ -1,5 +1,10 @@
 package com.olympiades.firststep.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,10 +30,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -56,20 +63,40 @@ fun FirstStepFilterChip(
     trailingIcon: ImageVector? = null,
     testTag: String? = null
 ) {
-    val backgroundColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val contentColor = if (selected) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val backgroundColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(180),
+        label = "chip_bg_color"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            Color.White
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(180),
+        label = "chip_content_color"
+    )
+    val chipScale by animateFloatAsState(
+        targetValue = if (selected) 1.03f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "chip_scale"
+    )
     val border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
 
     Surface(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = chipScale
+                scaleY = chipScale
+            }
             .height(32.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Checkbox, onClick = onClick)
@@ -123,11 +150,16 @@ fun StatusBadge(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val animatedColor by animateColorAsState(
+        targetValue = color,
+        animationSpec = tween(220),
+        label = "status_badge_color"
+    )
     Box(
         modifier = modifier
             .height(22.dp)
             .clip(RoundedCornerShape(11.dp))
-            .background(color)
+            .background(animatedColor)
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center
     ) {

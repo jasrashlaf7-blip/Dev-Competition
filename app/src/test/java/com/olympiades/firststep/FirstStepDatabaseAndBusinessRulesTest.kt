@@ -217,6 +217,38 @@ class FirstStepDatabaseAndBusinessRulesTest {
             OfferFilterCriteria(query = "developpement")
         ).first()
         assertTrue(noAccentResults.isNotEmpty())
+
+        // Search by a MIDDLE or LAST word in the offer/course title (never restricted to first word)
+        val createdId = repository.createOffer(
+            companyId = 1L,
+            domainId = 1L,
+            locationId = 1L,
+            titleFr = "Développeur Mobile Android Kotlin",
+            titleAr = "مطور تطبيقات أندرويد كوتلن",
+            descriptionFr = "Création d'applications natives.",
+            descriptionAr = "تطوير تطبيقات أندرويد.",
+            durationMonths = 4,
+            isPaid = true,
+            status = OfferStatus.OPEN,
+            deadline = "2026-12-30"
+        ).getOrThrow()
+
+        // Search by middle word ("Mobile") and last word ("Kotlin") in reverse order
+        val middleLastResults = repository.observeFilteredOffers(
+            OfferFilterCriteria(query = "Kotlin Mobile")
+        ).first()
+        assertTrue(middleLastResults.any { it.id == createdId })
+        // Offer whose title contains all tokens should be ranked at the top (Tier 0)
+        assertTrue(
+            middleLastResults.first().titleFr.contains("Mobile", ignoreCase = true) &&
+                middleLastResults.first().titleFr.contains("Kotlin", ignoreCase = true)
+        )
+
+        // Search Arabic middle word with alef variant ("اندرويد" matches "أندرويد")
+        val arabicMiddleWord = repository.observeFilteredOffers(
+            OfferFilterCriteria(query = "اندرويد")
+        ).first()
+        assertTrue(arabicMiddleWord.any { it.id == createdId })
     }
 
     @Test

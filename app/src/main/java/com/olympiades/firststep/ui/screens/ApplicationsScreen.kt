@@ -1,6 +1,14 @@
 package com.olympiades.firststep.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,9 +34,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
@@ -59,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -228,7 +236,7 @@ fun ApplicationsScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             EmptyStateView(
-                                icon = Icons.Outlined.Assignment,
+                                icon = Icons.AutoMirrored.Outlined.Assignment,
                                 title = strings.applicationsEmptyTitle,
                                 subtitle = strings.applicationsEmptySubtitle
                             )
@@ -257,7 +265,12 @@ fun ApplicationsScreen(
                                         onNoteChange = { viewModel.updateNoteDraft(app.id, it) },
                                         onSelectNextStatus = { nextStatus ->
                                             viewModel.requestStatusTransition(app, nextStatus)
-                                        }
+                                        },
+                                        modifier = Modifier.animateItem(
+                                            fadeInSpec = tween(220),
+                                            fadeOutSpec = tween(160),
+                                            placementSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                        )
                                     )
                                 }
                             }
@@ -279,15 +292,24 @@ private fun ApplicationTrackingCard(
     onOpenOffer: () -> Unit,
     onEditDetailsClick: () -> Unit,
     onNoteChange: (String) -> Unit,
-    onSelectNextStatus: (ApplicationStatus) -> Unit
+    onSelectNextStatus: (ApplicationStatus) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
     val isArabic = strings.language == AppLanguage.AR
     val offerTitle = if (isArabic) application.offer.titleAr else application.offer.titleFr
     val allowedTransitions = ApplicationStateMachine.allowedNextStatuses(application.currentStatus)
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "app_card_chevron_rotation"
+    )
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("application_card_${application.id}"),
         shape = RoundedCornerShape(12.dp),
@@ -325,18 +347,21 @@ private fun ApplicationTrackingCard(
                     ApplicationStatusBadge(status = application.currentStatus)
                     Spacer(modifier = Modifier.height(4.dp))
                     Icon(
-                        imageVector = if (isExpanded) {
-                            Icons.Outlined.ExpandLess
-                        } else {
-                            Icons.Outlined.ExpandMore
-                        },
+                        imageVector = Icons.Outlined.ExpandMore,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.rotate(chevronRotation)
                     )
                 }
             }
 
-            AnimatedVisibility(visible = isExpanded) {
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(tween(180)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
